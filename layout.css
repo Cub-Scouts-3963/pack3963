@@ -241,6 +241,37 @@
   margin: auto;
 }
 
+.footer-social {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  margin: 16px 0 4px;
+}
+
+.footer-social a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  color: var(--white);
+  font-weight: 700;
+  text-decoration: none;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 999px;
+}
+
+.footer-social a:hover,
+.footer-social a:focus-visible {
+  color: var(--blue);
+  background: var(--white);
+}
+
+.footer-social svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
 .footer-leader-login {
   margin: 12px 0 0;
   font-size: 0.85rem;
