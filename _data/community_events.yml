@@ -9,16 +9,15 @@ events:
     date_label: Saturday, October 17
     title: 41st Annual Spaghetti Dinner
     time: 4:00–7:00 PM
-    location: Eden United Church of Christ, 5051 W. Gunnison St., Chicago
+    location: Eden United Church of Christ, 5051 W. Gunnison St., Chicago, IL 60630
     organizer: The Sons of Eden
     description: >-
       Enjoy all-you-can-eat pasta at Eden's annual community dinner. Advance tickets are $20,
-      tickets at the door are $25, and children age 8 and younger eat free. A limited quantity of
-      sauce is also available to preorder by 1:00 PM on October 14: $12 per pint or $18 per quart.
+      tickets at the door are $25, and children age 8 and younger eat free.
     signup_label: Reserve dinner tickets
     signup_url: https://docs.google.com/forms/d/e/1FAIpQLSdzjgvLgDy9dpSAcvPW84ipvSZPUw8XCz2kz4UP55Cbf3bWDg/viewform?usp=send_form
     payment_label: Pay for dinner
-    payment_url: https://www.paypal.com/donate?token=JjPAD8lPmlvI5_R-xHcLBACIi2kvJ0CkNYDDTk9hHUlveKS_Scy0zRVVKZ1Ur1wsjfCRhehn_JDVbMKU
+    payment_url: https://www.paypal.com/cgi-bin/webscr?cmd=_donations&bn=TipsandTricks_SP&business=donations%40edenuccchicago.org&item_name=Spaghetti%20Dinner%20Tickets&rm=0&currency_code=USD
   - id: eden-fundays-bowling-2026
     date: "2026-10-12"
     date_label: Monday, October 12
