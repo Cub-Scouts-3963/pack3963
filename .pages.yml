@@ -28,6 +28,8 @@ content:
       - { name: email, label: Public Email, type: string, required: true }
       - { name: phone, label: Public Phone, type: string, required: true }
       - { name: registration_url, label: Registration URL, type: string, required: true }
+      - { name: facebook_url, label: Facebook Page URL, type: string, required: false }
+      - { name: instagram_url, label: Instagram Profile URL, type: string, required: false }
       - { name: analytics_id, label: Google Analytics ID, type: string, required: false }
       - name: meeting
         label: Meeting Details
