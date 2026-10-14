@@ -71,6 +71,19 @@ events:
     location: meeting
     description: >-
       Regular den meetings will include preparation for the Pack's November Raingutter Regatta.
+  - id: popcorn-order-forms-due-2026
+    kind: deadline
+    date: "2026-10-24"
+    date_label: Saturday, October 24
+    title: Popcorn Order Forms Due
+    time: Submit by end of day
+    location: Submit to Pack leadership
+    announcement: Popcorn order forms are due Saturday, October 24.
+    description: >-
+      Return completed popcorn order forms to Pack leadership. Online sales continue through
+      Friday, November 20, but the online store has a slightly different product selection.
+    signup_label: View popcorn sales details
+    signup_url: /popcorn.html
   - id: ptac-pushmobile-race-2026
     date: "2026-10-24"
     date_label: Saturday, October 24
@@ -88,12 +101,13 @@ events:
     location: Jefferson (Thomas) Memorial Park
     description: >-
       Scouts may volunteer for an optional popcorn-sales shift at the Jefferson Park Sunday Market.
+      A signup link will be shared closer to the date.
   - id: tentative-october-activity-2026
     date: "2026-10-31"
     date_label: Saturday, October 31
-    title: Tentative Den Meetings or Forest Preserve Stewardship
+    title: Den Meetings (Tentative)
     time: 9:30–11:00 AM
-    location: To be confirmed
+    location: meeting
     description: >-
       The Pack calendar currently reserves this morning for den meetings or a possible forest
       preserve stewardship activity. Final details will be shared when confirmed.
@@ -102,7 +116,8 @@ events:
     date_label: Sunday, November 15
     title: Forest Preserve Stewardship Day
     time: 10:00 AM–1:00 PM
-    location: Miami Woods
+    location: Miami Woods, Morton Grove, IL
+    location_url: https://www.google.com/maps/search/?api=1&query=Miami+Woods+Morton+Grove+IL
     description: >-
       Pack families will volunteer during the Forest Preserves' official stewardship work day.
       A group waiver has been submitted, and each participant will complete an individual waiver
@@ -119,18 +134,18 @@ events:
   - id: tentative-november-activity-2026
     date: "2026-11-07"
     date_label: Saturday, November 7
-    title: Tentative Den Meetings or Forest Preserve Stewardship
-    time: To be announced
-    location: To be confirmed
+    title: Den Meetings / Raingutter Regatta Work (Tentative)
+    time: 9:30 AM
+    location: meeting
     description: >-
-      The Pack calendar reserves this date for den meetings or a possible forest preserve
-      stewardship activity. Final plans will be shared when confirmed.
+      The Pack calendar reserves this date for den meetings and Raingutter Regatta preparation
+      or a possible forest preserve stewardship activity. Final plans will be shared when confirmed.
   - id: friendship-place-service-2026
     date: "2026-11-14"
     date_label: Saturday, November 14
     title: Friendship Place Service Opportunity
-    time: To be announced
-    location: To be confirmed
+    time: 9:30 AM
+    location: Friendship Place, 5150 N. Northwest Hwy., Suite 100, Chicago, IL 60630
     description: >-
       Liz is organizing a Friendship Place service opportunity, especially for younger Scouts.
       This may also be a good alternative for families who cannot participate in Sunday's Forest
