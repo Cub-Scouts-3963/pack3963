@@ -1,0 +1,98 @@
+heading: Eden UCC Community Events
+intro: >-
+  Eden United Church of Christ generously provides the meeting space for Pack 3963. We are happy
+  to share these family and community activities organized by Eden UCC and its ministry partners.
+  These are community events, not Pack 3963 programs.
+events:
+  - id: eden-spaghetti-dinner-2026
+    date: "2026-10-17"
+    date_label: Saturday, October 17
+    title: 41st Annual Spaghetti Dinner
+    time: 4:00–7:00 PM
+    location: Eden United Church of Christ, 5051 W. Gunnison St., Chicago
+    organizer: The Sons of Eden
+    description: >-
+      Enjoy all-you-can-eat pasta at Eden's annual community dinner. Advance tickets are $20,
+      tickets at the door are $25, and children age 8 and younger eat free. A limited quantity of
+      sauce is also available to preorder by 1:00 PM on October 14: $12 per pint or $18 per quart.
+    signup_label: Reserve dinner tickets
+    signup_url: https://docs.google.com/forms/d/e/1FAIpQLSdzjgvLgDy9dpSAcvPW84ipvSZPUw8XCz2kz4UP55Cbf3bWDg/viewform?usp=send_form
+    payment_label: Pay for dinner
+    payment_url: https://www.paypal.com/donate?token=JjPAD8lPmlvI5_R-xHcLBACIi2kvJ0CkNYDDTk9hHUlveKS_Scy0zRVVKZ1Ur1wsjfCRhehn_JDVbMKU
+  - id: eden-fundays-bowling-2026
+    date: "2026-10-12"
+    date_label: Monday, October 12
+    title: FunDays – Bowling at Habetler Bowl
+    time: 9:30 AM–3:00 PM
+    location: Drop-off and pickup at Eden UCC, 5051 W. Gunnison St., Chicago
+    organizer: Eden UCC and Redeemer of Calvary UMC
+    description: >-
+      A supervised autumn outing for children ages 6–13 featuring bowling, followed by gym time
+      and games at Eden. The fee is $50, with a 10% sibling discount; financial assistance is
+      available. Registration and payment are due one week before the activity.
+    signup_label: View registration form
+    signup_url: /assets/images/eden/2026-fundays-registration-form.jpg
+    contact_label: Email completed form
+    contact_url: mailto:christianeducation@edenuccchicago.org
+  - id: eden-fundays-arboretum-2026
+    date: "2026-11-02"
+    date_label: Monday, November 2
+    title: FunDays – Morton Arboretum
+    time: 9:30 AM–3:00 PM
+    location: Drop-off and pickup at Eden UCC, 5051 W. Gunnison St., Chicago
+    organizer: Eden UCC and Redeemer of Calvary UMC
+    description: >-
+      A supervised autumn outing for children ages 6–13 to explore Vivid Creatures, the Children's
+      Garden, and restored woods at the Morton Arboretum. The fee is $50, with a 10% sibling
+      discount; financial assistance is available. Registration and payment are due one week before
+      the activity.
+    signup_label: View registration form
+    signup_url: /assets/images/eden/2026-fundays-registration-form.jpg
+    contact_label: Email completed form
+    contact_url: mailto:christianeducation@edenuccchicago.org
+  - id: eden-fundays-drop-in-2026
+    date: "2026-11-03"
+    date_label: Tuesday, November 3
+    title: FunDays – Drop-In Day at Eden UCC
+    time: 9:30 AM–3:00 PM
+    location: Eden United Church of Christ, 5051 W. Gunnison St., Chicago
+    organizer: Eden UCC and Redeemer of Calvary UMC
+    description: >-
+      A supervised drop-in day for children ages 6–13 during the CPS day off. The fee is $50, with
+      a 10% sibling discount; financial assistance is available. Registration and payment are due
+      one week before the activity.
+    signup_label: View registration form
+    signup_url: /assets/images/eden/2026-fundays-registration-form.jpg
+    contact_label: Email completed form
+    contact_url: mailto:christianeducation@edenuccchicago.org
+  - id: eden-fundays-walnut-room-2026
+    date: "2026-11-24"
+    date_label: Tuesday, November 24
+    title: FunDays – Lunch at the Walnut Room
+    time: 9:30 AM–3:00 PM
+    location: Drop-off and pickup at Eden UCC, 5051 W. Gunnison St., Chicago
+    organizer: Eden UCC and Redeemer of Calvary UMC
+    description: >-
+      A supervised outing for children ages 6–13 to see the Great Tree and enjoy lunch at Macy's
+      Walnut Room. The fee is $50, with a 10% sibling discount; financial assistance is available.
+      Registration and payment are due one week before the activity.
+    signup_label: View registration form
+    signup_url: /assets/images/eden/2026-fundays-registration-form.jpg
+    contact_label: Email completed form
+    contact_url: mailto:christianeducation@edenuccchicago.org
+resources:
+  - title: 41st Annual Spaghetti Dinner Flyer
+    image: /assets/images/eden/2026-spaghetti-dinner.png
+    alt: >-
+      Flyer for Eden UCC's 41st Annual Spaghetti Dinner on October 17, 2026, from 4:00 to 7:00 PM.
+    end_date: "2026-10-17"
+  - title: Autumn FunDays Flyer
+    image: /assets/images/eden/2026-autumn-fundays.jpg
+    alt: >-
+      Flyer listing Eden UCC FunDays outings for children ages 6 through 13 in October and November 2026.
+    end_date: "2026-11-24"
+  - title: FunDays Registration Form
+    image: /assets/images/eden/2026-fundays-registration-form.jpg
+    alt: >-
+      Printable registration and permission form for Eden UCC FunDays activities in fall 2026.
+    end_date: "2026-11-24"

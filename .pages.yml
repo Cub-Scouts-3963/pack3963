@@ -67,6 +67,44 @@ content:
           - { name: signup_label, label: Signup Button Label, type: string, required: false }
           - { name: signup_url, label: Signup URL, type: string, required: false }
 
+  - name: community_events
+    label: Eden UCC Community Events
+    type: file
+    path: _data/community_events.yml
+    format: yaml
+    fields:
+      - { name: heading, label: Section Heading, type: string, required: true }
+      - { name: intro, label: Section Introduction, type: text, required: true }
+      - name: events
+        label: Community Events
+        type: object
+        list: true
+        fields:
+          - { name: id, label: Event ID, type: string, required: true }
+          - { name: date, label: Start Date, type: date, required: true }
+          - { name: end_date, label: End Date, type: date, required: false }
+          - { name: date_label, label: Display Date, type: string, required: true }
+          - { name: title, label: Event Title, type: string, required: true }
+          - { name: time, label: Time, type: string, required: true }
+          - { name: location, label: Location, type: string, required: true }
+          - { name: organizer, label: Organizer, type: string, required: true }
+          - { name: description, label: Description, type: text, required: true }
+          - { name: signup_label, label: Primary Button Label, type: string, required: false }
+          - { name: signup_url, label: Primary Button URL, type: string, required: false }
+          - { name: payment_label, label: Payment Button Label, type: string, required: false }
+          - { name: payment_url, label: Payment URL, type: string, required: false }
+          - { name: contact_label, label: Contact Button Label, type: string, required: false }
+          - { name: contact_url, label: Contact URL, type: string, required: false }
+      - name: resources
+        label: Flyers and Forms
+        type: object
+        list: true
+        fields:
+          - { name: title, label: Resource Title, type: string, required: true }
+          - { name: image, label: Image Path, type: string, required: true }
+          - { name: alt, label: Image Description, type: text, required: true }
+          - { name: end_date, label: Hide After, type: date, required: true }
+
   - name: photo_gallery
     label: Photo Gallery
     type: file

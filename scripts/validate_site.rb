@@ -69,6 +69,23 @@ event_list.each_with_index do |event, index|
   end
 end
 
+community_events_path = ROOT / "_data/community_events.yml"
+community_events = load_yaml(community_events_path)
+community_event_list = community_events.fetch("events", [])
+errors << "_data/community_events.yml: at least one community event is required" if community_event_list.empty?
+community_event_list.each_with_index do |event, index|
+  %w[id date date_label title time location organizer description].each do |key|
+    errors << "_data/community_events.yml: event #{index + 1} is missing #{key}" if event[key].nil? || event[key].to_s.empty?
+  end
+end
+community_events.fetch("resources", []).each_with_index do |resource, index|
+  %w[title image alt end_date].each do |key|
+    errors << "_data/community_events.yml: resource #{index + 1} is missing #{key}" if resource[key].nil? || resource[key].to_s.empty?
+  end
+  image = resource["image"].to_s.sub(%r{\A/}, "")
+  errors << "_data/community_events.yml: missing resource image #{image}" unless (ROOT / image).file?
+end
+
 photo_data = load_yaml(ROOT / "_data/photos.yml")
 photos = photo_data.fetch("photos", [])
 seen_photos = {}
@@ -88,7 +105,7 @@ ROOT.glob("assets/images/pack3963photos/*.{heic,HEIC}").each do |path|
 end
 
 if errors.empty?
-  puts "Site validation passed: #{html_files.length} pages, #{event_list.length} events, and #{photos.length} photos checked."
+  puts "Site validation passed: #{html_files.length} pages, #{event_list.length} Pack events, #{community_event_list.length} community events, and #{photos.length} photos checked."
 else
   warn "Site validation failed:"
   errors.each { |error| warn "- #{error}" }

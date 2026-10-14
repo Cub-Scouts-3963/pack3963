@@ -3,16 +3,80 @@
    ========================================= */
 @media (max-width: 768px) {
 
+  .main-nav {
+    padding: 0;
+  }
+
   .nav-inner {
     flex-direction: column;
     align-items: flex-start;
-    padding: 10px 20px;
+    padding: 8px 16px;
+  }
+
+  .nav-header {
+    justify-content: space-between;
+    width: 100%;
+    min-height: 46px;
+  }
+
+  .main-nav.nav-menu-ready .nav-menu-toggle {
+    display: flex;
   }
 
   .nav-links {
+    width: 100%;
     flex-wrap: wrap;
     gap: 12px;
     margin-top: 10px;
+    align-items: flex-start;
+  }
+
+  .main-nav.nav-menu-ready .nav-links {
+    display: none;
+  }
+
+  .main-nav.nav-menu-ready .nav-links.is-open {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2px 16px;
+    box-sizing: border-box;
+    margin: 8px 0 0;
+    padding: 10px 0 4px;
+    border-top: 1px solid rgba(255, 255, 255, 0.25);
+  }
+
+  .nav-links > li,
+  .nav-links a,
+  .nav-dropdown summary {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .nav-links a,
+  .nav-dropdown summary {
+    display: block;
+    padding: 8px 4px;
+  }
+
+  .nav-submenu {
+    position: static;
+    min-width: 0;
+    margin-top: 7px;
+    padding: 4px 0 0 14px;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+  }
+
+  .nav-dropdown[open] .nav-submenu {
+    display: grid;
+    gap: 6px;
+  }
+
+  .nav-submenu a {
+    padding: 2px 0;
+    font-size: 0.9rem;
+    font-weight: 500;
   }
 
   .hero-header {
@@ -38,6 +102,48 @@
     width: 100%;
     text-align: center;
   }
+
+  .event-page-switcher {
+    grid-template-columns: 1fr;
+  }
+
+  .announcement-banner {
+    justify-content: space-between;
+    flex-wrap: nowrap;
+    gap: 10px;
+    padding: 10px 14px;
+    text-align: left;
+  }
+
+  .announcement-banner .btn-gold {
+    margin: 0;
+  }
+
+  .announcement-banner__messages {
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 2px;
+  }
+
+  .announcement-banner__messages p {
+    font-size: 0.9rem;
+    line-height: 1.25;
+  }
+
+  .announcement-banner__link {
+    flex: 0 0 auto;
+    padding: 7px 10px;
+    white-space: nowrap;
+    font-size: 0.85rem;
+  }
+
+  .announcement-banner__link-full {
+    display: none;
+  }
+
+  .announcement-banner__link-short {
+    display: inline;
+  }
 }
 
 /* =========================================
@@ -51,6 +157,10 @@
 
   .nav-logo {
     font-size: 1.2rem;
+  }
+
+  .announcement-banner__messages p {
+    font-size: 0.82rem;
   }
 
   h1, h2, h3 {

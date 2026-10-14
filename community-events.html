@@ -1,0 +1,88 @@
+---
+layout: default
+title: Eden UCC Community Events | Pack 3963
+description: Find family programs and community events hosted by Eden United Church of Christ and its ministry partners in Chicago.
+keywords: Eden UCC events, Eden United Church of Christ Chicago, family activities Chicago, community events Chicago, Pack 3963 host church
+scripts:
+- /assets/js/events-page.js
+---
+
+<header class="hero-header">
+  <div class="hero-image-wrapper">
+    <img
+      src="assets/images/troopheader.png"
+      alt="Community events shared by Pack 3963 and Eden United Church of Christ"
+      class="hero-image"
+    />
+  </div>
+</header>
+
+<main class="section">
+  <div class="section-inner">
+    <h1>{{ site.data.community_events.heading }}</h1>
+    <p>{{ site.data.community_events.intro }}</p>
+
+    <nav class="event-page-switcher" aria-label="Choose an event calendar">
+      <a class="event-page-option" href="{{ '/events.html' | relative_url }}">
+        <strong>Pack 3963 Events</strong>
+        <span>Camping, den meetings, races, service projects, and Pack activities.</span>
+      </a>
+      <a class="event-page-option event-page-option--active" href="{{ '/community-events.html' | relative_url }}" aria-current="page">
+        <strong>Eden UCC Community Events</strong>
+        <span>Family programs and community activities shared by our host church.</span>
+      </a>
+    </nav>
+
+    <h2>Upcoming Community Events</h2>
+    {% assign community_events = site.data.community_events.events | sort: "date" %}
+    <p id="no-community-events" class="callout-box" hidden>
+      No upcoming Eden UCC community events are currently posted. Please check back soon.
+    </p>
+    {% for event in community_events %}
+    <article
+      class="callout-box event-card community-event-card"
+      data-event-end="{{ event.end_date | default: event.date }}"
+      data-event-group="community"
+    >
+      <h3><span class="community-event-badge">Eden UCC</span>{{ event.date_label }} – {{ event.title }}</h3>
+      <p><strong>Time:</strong> {{ event.time }}</p>
+      <p><strong>Location:</strong> {{ event.location }}</p>
+      <p><strong>Organized by:</strong> {{ event.organizer }}</p>
+      <p>{{ event.description }}</p>
+      <div class="event-actions">
+        {% if event.signup_url %}
+        <a class="btn-blue" href="{{ event.signup_url }}" target="_blank" rel="noopener noreferrer">
+          {{ event.signup_label | default: "Learn more" }}
+        </a>
+        {% endif %}
+        {% if event.payment_url %}
+        <a class="btn-secondary" href="{{ event.payment_url }}" target="_blank" rel="noopener noreferrer">
+          {{ event.payment_label | default: "Pay online" }}
+        </a>
+        {% endif %}
+        {% if event.contact_url %}
+        <a class="btn-secondary" href="{{ event.contact_url }}">
+          {{ event.contact_label | default: "Contact organizer" }}
+        </a>
+        {% endif %}
+      </div>
+    </article>
+    {% endfor %}
+
+    <h2>Flyers and Forms</h2>
+    <div class="community-resource-grid" aria-label="Eden UCC event flyers and forms">
+      {% for resource in site.data.community_events.resources %}
+      <a
+        class="community-resource-card"
+        href="{{ resource.image | relative_url }}"
+        target="_blank"
+        rel="noopener noreferrer"
+        data-resource-end="{{ resource.end_date }}"
+      >
+        <img src="{{ resource.image | relative_url }}" alt="{{ resource.alt }}" loading="lazy">
+        <span>{{ resource.title }}</span>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+</main>

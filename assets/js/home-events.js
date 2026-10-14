@@ -11,7 +11,8 @@ if (eventDataElement && nextEventElement) {
   ].join('-');
 
   const nextEvent = events
-    .filter((event) => (event.end_date || event.date) >= today)
+    .filter((event) => event.kind !== 'deadline'
+      && (event.end_date || event.date) >= today)
     .sort((first, second) => first.date.localeCompare(second.date))[0];
 
   if (nextEvent) {

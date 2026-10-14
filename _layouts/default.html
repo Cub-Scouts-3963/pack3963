@@ -8,11 +8,11 @@
   {% if page.keywords %}<meta name="keywords" content="{{ page.keywords | escape }}">{% endif %}
   {% if page.robots %}<meta name="robots" content="{{ page.robots }}">{% endif %}
 
-  <link rel="stylesheet" href="{{ '/base.css' | relative_url }}">
-  <link rel="stylesheet" href="{{ '/layout.css' | relative_url }}">
-  <link rel="stylesheet" href="{{ '/components.css' | relative_url }}">
-  <link rel="stylesheet" href="{{ '/form.css' | relative_url }}">
-  <link rel="stylesheet" href="{{ '/responsive.css' | relative_url }}">
+  <link rel="stylesheet" href="{{ '/base.css' | relative_url }}?v={{ site.asset_version }}">
+  <link rel="stylesheet" href="{{ '/layout.css' | relative_url }}?v={{ site.asset_version }}">
+  <link rel="stylesheet" href="{{ '/components.css' | relative_url }}?v={{ site.asset_version }}">
+  <link rel="stylesheet" href="{{ '/form.css' | relative_url }}?v={{ site.asset_version }}">
+  <link rel="stylesheet" href="{{ '/responsive.css' | relative_url }}?v={{ site.asset_version }}">
   {% for stylesheet in page.styles %}
     <link rel="stylesheet" href="{{ stylesheet | relative_url }}">
   {% endfor %}
@@ -34,6 +34,7 @@
   {{ content }}
 
   {% include footer.html %}
+  <script src="{{ '/assets/js/navigation.js' | relative_url }}?v={{ site.asset_version }}" defer></script>
   {% for script in page.scripts %}
     <script src="{{ script | relative_url }}" defer></script>
   {% endfor %}

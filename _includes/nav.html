@@ -1,10 +1,36 @@
 <nav class="main-nav" aria-label="Primary navigation">
   <div class="nav-inner">
-    <a href="{{ '/index.html' | relative_url }}" class="nav-logo">{{ site.data.pack.short_name }}</a>
+    <div class="nav-header">
+      <a href="{{ '/index.html' | relative_url }}" class="nav-logo">{{ site.data.pack.short_name }}</a>
+      <button
+        class="nav-menu-toggle"
+        type="button"
+        aria-expanded="false"
+        aria-controls="primary-nav-links"
+      >
+        <span class="nav-menu-toggle__icon" aria-hidden="true"></span>
+        <span>Menu</span>
+      </button>
+    </div>
 
-    <ul class="nav-links">
+    <ul class="nav-links" id="primary-nav-links">
       {% for item in site.data.navigation %}
-        <li><a href="{{ item.url | relative_url }}">{{ item.name }}</a></li>
+        <li{% if item.children %} class="nav-item-dropdown"{% endif %}>
+          {% if item.children %}
+          <details class="nav-dropdown">
+            <summary>
+              {{ item.name }}<span class="nav-dropdown-icon" aria-hidden="true">▾</span>
+            </summary>
+            <ul class="nav-submenu" aria-label="{{ item.name }} submenu">
+              {% for child in item.children %}
+              <li><a href="{{ child.url | relative_url }}">{{ child.name }}</a></li>
+              {% endfor %}
+            </ul>
+          </details>
+          {% else %}
+          <a href="{{ item.url | relative_url }}">{{ item.name }}</a>
+          {% endif %}
+        </li>
       {% endfor %}
     </ul>
   </div>

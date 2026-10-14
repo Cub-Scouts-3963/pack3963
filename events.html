@@ -3,6 +3,8 @@ layout: default
 title: Cub Scout Events – Pack 3963 | Chicago, IL
 description: Explore upcoming Cub Scout events for Pack 3963 in Chicago, IL. Serving Jefferson Park, Portage Park, and the Northwest Side with camping, Pinewood Derby, service projects, and family-friendly activities.
 keywords: Cub Scout events Chicago, Pack 3963 events, Jefferson Park Scouts, Portage Park Scouts, Cub Scout calendar, youth activities Chicago, scouting events
+scripts:
+- /assets/js/events-page.js
 ---
 
 <!-- Hero Header -->
@@ -20,7 +22,7 @@ keywords: Cub Scout events Chicago, Pack 3963 events, Jefferson Park Scouts, Por
   <main class="section">
     <div class="section-inner">
 
-      <h1>Upcoming Pack 3963 Events</h1>
+      <h1>Pack 3963 Events</h1>
       <p>
         Cub Scout Pack 3963 offers year-round activities for families across Jefferson Park, Portage Park,
         and the Northwest Side of Chicago. From camping trips to STEM nights, our events help Scouts learn,
@@ -32,15 +34,37 @@ keywords: Cub Scout events Chicago, Pack 3963 events, Jefferson Park Scouts, Por
         <strong>{{ site.data.pack.meeting.street }}, {{ site.data.pack.meeting.city_state_zip }}</strong>.
       </p>
 
+      <nav class="event-page-switcher" aria-label="Choose an event calendar">
+        <a class="event-page-option event-page-option--active" href="{{ '/events.html' | relative_url }}" aria-current="page">
+          <strong>Pack 3963 Events</strong>
+          <span>Camping, den meetings, races, service projects, and Pack activities.</span>
+        </a>
+        <a class="event-page-option" href="{{ '/community-events.html' | relative_url }}">
+          <strong>Eden UCC Community Events</strong>
+          <span>Family programs and community activities shared by our host church.</span>
+        </a>
+      </nav>
+
       <!-- ============================
            UPCOMING EVENTS
            ============================ -->
       <h2>{{ site.data.events.season }} Events</h2>
 
       {% assign upcoming_events = site.data.events.events | sort: "date" %}
+      <p id="no-upcoming-events" class="callout-box" hidden>
+        No upcoming events are currently posted. Please check back soon.
+      </p>
       {% for event in upcoming_events %}
-      <article class="callout-box">
-        <h3>{{ event.date_label }} – {{ event.title }}</h3>
+      <article
+        class="callout-box event-card pack-event-card"
+        data-event-end="{{ event.end_date | default: event.date }}"
+        data-event-kind="{{ event.kind | default: 'event' }}"
+        data-event-group="pack"
+      >
+        <h3>
+          {% if event.kind == "deadline" %}<span class="event-kind-badge">Deadline</span>{% endif %}
+          {{ event.date_label }} – {{ event.title }}
+        </h3>
         <p><strong>Time:</strong> {{ event.time }}</p>
         <p>
           <strong>Location:</strong>

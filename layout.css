@@ -21,10 +21,77 @@
   color: var(--white);
 }
 
+.nav-header {
+  display: flex;
+  align-items: center;
+}
+
+.nav-menu-toggle {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  color: var(--white);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 6px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.nav-menu-toggle__icon,
+.nav-menu-toggle__icon::before,
+.nav-menu-toggle__icon::after {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: currentColor;
+  border-radius: 2px;
+}
+
+.nav-menu-toggle__icon {
+  position: relative;
+}
+
+.nav-menu-toggle__icon::before,
+.nav-menu-toggle__icon::after {
+  position: absolute;
+  left: 0;
+  content: "";
+}
+
+.nav-menu-toggle__icon::before {
+  top: -6px;
+}
+
+.nav-menu-toggle__icon::after {
+  top: 6px;
+}
+
+.nav-menu-toggle[aria-expanded="true"] .nav-menu-toggle__icon {
+  background: transparent;
+}
+
+.nav-menu-toggle[aria-expanded="true"] .nav-menu-toggle__icon::before {
+  top: 0;
+  transform: rotate(45deg);
+}
+
+.nav-menu-toggle[aria-expanded="true"] .nav-menu-toggle__icon::after {
+  top: 0;
+  transform: rotate(-45deg);
+}
+
 .nav-links {
   list-style: none;
   display: flex;
   gap: 20px;
+  align-items: center;
+}
+
+.nav-links > li {
+  position: relative;
 }
 
 .nav-links a {
@@ -34,6 +101,78 @@
 
 .nav-links a:hover {
   text-decoration: underline;
+}
+
+.nav-dropdown-icon {
+  display: inline-block;
+  margin-left: 3px;
+  font-size: 0.75em;
+  transition: transform 0.15s ease;
+}
+
+.nav-dropdown summary {
+  color: var(--white);
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+.nav-dropdown summary::-webkit-details-marker {
+  display: none;
+}
+
+.nav-dropdown summary:hover {
+  text-decoration: underline;
+}
+
+.nav-dropdown summary:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 4px;
+}
+
+.nav-dropdown[open] .nav-dropdown-icon {
+  transform: rotate(180deg);
+}
+
+.nav-submenu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 10px);
+  left: -14px;
+  display: none;
+  min-width: 230px;
+  margin: 0;
+  padding: 8px;
+  list-style: none;
+  background: var(--blue);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+}
+
+.nav-submenu::before {
+  content: "";
+  position: absolute;
+  top: -11px;
+  right: 0;
+  left: 0;
+  height: 11px;
+}
+
+.nav-submenu a {
+  display: block;
+  padding: 9px 10px;
+  border-radius: 4px;
+}
+
+.nav-submenu a:hover,
+.nav-submenu a:focus-visible {
+  background: rgba(255, 255, 255, 0.12);
+  text-decoration: none;
+}
+
+.nav-dropdown[open] .nav-submenu {
+  display: block;
 }
 
 /* =========================================
@@ -106,24 +245,66 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 10px 18px;
-  margin-top: 12px;
+  gap: 14px;
 }
 
 .social-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  color: var(--blue);
   font-weight: 700;
+  text-decoration: none;
+  border: 1px solid currentColor;
+  border-radius: 999px;
 }
 
-.site-footer .social-links a {
+.social-links a:hover,
+.social-links a:focus-visible {
   color: var(--white);
+  background: var(--blue);
 }
 
-.site-footer .social-links a:hover,
-.site-footer .social-links a:focus-visible {
-  color: var(--gold);
+.social-links svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
 }
 
-.social-links-contact {
+.social-links--footer {
+  margin: 16px 0 4px;
+}
+
+.social-links--footer a {
+  color: var(--white);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.social-links--footer a:hover,
+.social-links--footer a:focus-visible {
+  color: var(--blue);
+  background: var(--white);
+}
+
+.social-links--contact {
   justify-content: flex-start;
-  margin-top: 0;
+  margin: 12px 0 20px;
+}
+
+.footer-leader-login {
+  margin: 12px 0 0;
+  font-size: 0.85rem;
+  opacity: 0.78;
+}
+
+.footer-leader-login a {
+  color: var(--white);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.footer-leader-login a:hover,
+.footer-leader-login a:focus-visible {
+  opacity: 1;
 }

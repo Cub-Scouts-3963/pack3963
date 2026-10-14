@@ -45,6 +45,7 @@ events:
     signup_label: RSVP for the White Pines campout
     signup_url: https://docs.google.com/forms/d/e/1FAIpQLScIABukVQSkIWGtBgGsmE7stfsnPLgyfufUGyxnkV7R8CHN4g/viewform?usp=sharing&ouid=109492507988722827764
   - id: class-b-shirt-size-deadline-2026
+    kind: deadline
     date: "2026-10-02"
     date_label: Friday, October 2
     title: Class B T-Shirt Size Deadline

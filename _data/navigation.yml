@@ -4,15 +4,20 @@
   url: /dens.html
 - name: Events
   url: /events.html
+  children:
+    - name: Pack 3963 Events
+      url: /events.html
+    - name: Eden UCC Events
+      url: /community-events.html
 - name: Leadership
   url: /leadership.html
 - name: Resources
   url: /resources.html
+- name: Popcorn
+  url: /popcorn.html
 - name: Photos
   url: /photos.html
 - name: Contact
   url: /contact.html
 - name: Join
   url: /join.html
-- name: Leader Login
-  url: /admin.html
