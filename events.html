@@ -75,7 +75,11 @@ scripts:
               {{ site.data.pack.meeting.venue }}
             {% endif %}
           {% else %}
-            {{ event.location }}
+            {% if event.location_url %}
+              <a href="{{ event.location_url }}" target="_blank" rel="noopener noreferrer">{{ event.location }}</a>
+            {% else %}
+              {{ event.location }}
+            {% endif %}
           {% endif %}
         </p>
         <p>{{ event.description }}</p>
