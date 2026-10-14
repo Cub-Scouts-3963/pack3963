@@ -13,13 +13,8 @@
   url: /leadership.html
 - name: Resources
   url: /resources.html
-  children:
-    - name: All Resources
-      url: /resources.html
-    - name: Popcorn Fundraising
-      url: /popcorn.html
-    - name: Parent Guide
-      url: /parent-guide.html
+- name: Popcorn
+  url: /popcorn.html
 - name: Photos
   url: /photos.html
 - name: Contact
