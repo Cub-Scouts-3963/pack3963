@@ -102,15 +102,14 @@ events:
     description: >-
       Scouts may volunteer for an optional popcorn-sales shift at the Jefferson Park Sunday Market.
       A signup link will be shared closer to the date.
-  - id: tentative-october-activity-2026
+  - id: october-den-meetings-2026
     date: "2026-10-31"
     date_label: Saturday, October 31
-    title: Den Meetings (Tentative)
+    title: Den Meetings
     time: 9:30–11:00 AM
     location: meeting
     description: >-
-      The Pack calendar currently reserves this morning for den meetings or a possible forest
-      preserve stewardship activity. Final details will be shared when confirmed.
+      Regular Pack 3963 den meetings at Eden United Church of Christ.
   - id: miami-woods-stewardship-2026
     date: "2026-11-15"
     date_label: Sunday, November 15
