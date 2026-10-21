@@ -279,7 +279,7 @@
 
   function filterAccountPicker() {
     const query = $("#entry-account-search").value.trim().toLowerCase();
-    $("#entry-accounts .account-picker-option").forEach(option => {
+    Array.from(document.querySelectorAll("#entry-accounts .account-picker-option")).forEach(option => {
       option.hidden = Boolean(query) && !option.dataset.search.includes(query);
     });
   }
