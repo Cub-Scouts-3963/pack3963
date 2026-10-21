@@ -90,7 +90,7 @@ The **Site checks** workflow builds the Jekyll site and runs `scripts/validate_s
 
 ### Cloudflare Workers builds
 
-The website Worker `pack3963` uses the root `wrangler.jsonc` to serve the Jekyll output in `_site`. Its empty `previews` block enables isolated branch previews. In Cloudflare's Workers Builds settings, both production and preview builds must run `bundle exec jekyll build --strict_front_matter` before their existing `npx wrangler deploy` or `npx wrangler preview` command. Workers Builds does not run a Wrangler custom build command from the configuration file.
+The website Worker `pack3963` uses the root `wrangler.jsonc` to serve the Jekyll output in `_site`. Its empty `previews` block enables isolated branch previews. In Cloudflare's Workers Builds settings, both production and preview builds must run `bundle exec ruby -EUTF-8 -S jekyll build --strict_front_matter` before their existing `npx wrangler deploy` or `npx wrangler preview` command. The explicit UTF-8 setting prevents Sass from rejecting Unicode characters under the build environment's default US-ASCII encoding. Workers Builds does not run a Wrangler custom build command from the configuration file.
 
 The authentication/email Worker is a separate service. Deploy it using `workers/auth-email/wrangler.jsonc`; do not point the website build at that configuration. Deployment configuration, Worker source, and database migrations are excluded from the public Jekyll output.
 
@@ -109,3 +109,4 @@ The authentication/email Worker is a separate service. Deploy it using `workers/
 - Store downloadable documents in `assets/docs/`.
 - Store only web-ready gallery images in the site repository. Keep original full-resolution photos in the Pack's private storage.
 - Never commit passwords, access tokens, private member data, or confidential documents.
+
