@@ -37,6 +37,9 @@
     renderCampaigns();renderOrderPicker();renderOrders();renderFamilies();renderMessages();
   }
   function renderCampaigns(){
+    const filter=$("#order-name-filter"), selected=filter.value;
+    filter.innerHTML='<option value="all">All order names</option>'+state.campaigns.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join("");
+    if(state.campaigns.some(c=>c.id===selected))filter.value=selected;
     const options=state.campaigns.filter(c=>c.active).map(c=>`<option value="${c.id}" data-price="${c.default_unit_price_cents}" data-due="${esc(c.due_on||"")}">${esc(c.name)}</option>`).join("");
     $("#order-campaign-select").innerHTML='<option value="">Choose an order...</option>'+options;
   }
@@ -52,13 +55,29 @@
     const paid=linked.filter(e=>e.entry_type!=="charge").reduce((n,e)=>n+Number(e.amount_cents),0);
     return {charges,paid,balance:Math.max(0,charges-paid)};
   }
-  function renderOrders(){
+  function filteredOrders(){
     const q=($("#order-search")?.value||"").toLowerCase(), filter=$("#order-status-filter")?.value||"all";
-    const rows=state.orders.filter(o=>{
+    const campaign=$("#order-name-filter").value;
+    return state.orders.filter(o=>{
       const p=orderPaid(o), hay=[o.campaign_name,o.account_name,o.ordered_for,o.item_variant,o.notes].join(" ").toLowerCase();
-      return(!q||hay.includes(q))&&(filter==="all"||(filter==="paid"?p.balance===0:filter==="unpaid"?p.paid===0&&p.balance>0:p.paid>0&&p.balance>0));
+      return(campaign==="all"||o.campaign_id===campaign)&&(!q||hay.includes(q))&&(filter==="all"||(filter==="paid"?p.balance===0:filter==="unpaid"?p.paid===0&&p.balance>0:p.paid>0&&p.balance>0));
     });
+  }
+  function renderOrders(){
+    const rows=filteredOrders();
+    $("#print-filtered-orders").disabled=!rows.length;
     $("#orders-table").innerHTML=rows.length?rows.map(o=>{const p=orderPaid(o);const status=p.balance===0?"Paid":p.paid>0?"Partial":"Unpaid";return `<tr><td><strong>${esc(o.campaign_name)}</strong><br><small>Due ${esc(o.due_on||"—")}</small></td><td>${esc(o.account_name)}</td><td>${esc(o.ordered_for||o.account_name)}</td><td>${o.quantity}</td><td>${esc(o.item_variant||"—")}</td><td class="money">${money(o.total_cents)}</td><td><span class="status-pill">${status}</span><br><small>${p.balance?money(p.balance)+" due":"Paid in full"}</small></td></tr>`}).join(""):'<tr><td colspan="7" class="empty-row">No matching orders.</td></tr>';
+  }
+  function printOrders(){
+    const rows=filteredOrders(); if(!rows.length){setStatus("No orders match the current filters.");return;}
+    renderOrders();
+    const popup=window.open("","_blank","width=1100,height=800");
+    if(!popup){setStatus("Please allow pop-ups to print orders.","error");return;}
+    const filters=[$("#order-name-filter").selectedOptions[0].textContent,$("#order-status-filter").selectedOptions[0].textContent,$("#order-search").value?`Search: ${$("#order-search").value}`:""].filter(Boolean).join(" · ");
+    const total=rows.reduce((n,o)=>n+Number(o.total_cents),0), due=rows.reduce((n,o)=>n+orderPaid(o).balance,0), quantity=rows.reduce((n,o)=>n+Number(o.quantity),0);
+    const table=$("#orders-table").closest("table").outerHTML;
+    popup.document.write(`<!doctype html><html lang="en"><head><title>Pack 3963 filtered orders</title><style>body{font:12px Arial,sans-serif;color:#172b3f;margin:24px}h1{color:#004b93}table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #ccd6e0;text-align:left}thead{display:table-header-group}tr{break-inside:avoid}.money{text-align:right}small{display:block}button{padding:10px}@page{size:landscape;margin:12mm}@media print{button{display:none}body{margin:0}}</style></head><body><button onclick="window.print()">Print / Save PDF</button><h1>Pack 3963 orders</h1><p>${esc(filters)}</p><p>${rows.length} order rows · ${quantity} items · Total ${money(total)} · Amount due ${money(due)}</p><p>Generated ${esc(new Date().toLocaleString())}</p>${table}</body></html>`);
+    popup.document.close(); popup.focus(); setTimeout(()=>popup.print(),150);
   }
   function updateOrderCount(){
     const n=$$("#order-account-options input:checked").length;
@@ -109,10 +128,13 @@
   function reveal(id){const e=$(id);e.hidden=false;e.scrollIntoView({behavior:"smooth",block:"start"})}
   document.addEventListener("DOMContentLoaded",async()=>{
     window.addEventListener("treasury-imported",()=>load().catch(x=>setStatus(x.message,"error")));
+    window.addEventListener("treasury-ledger-updated",()=>load().catch(x=>setStatus(x.message,"error")));
     $("#show-campaign-form")?.addEventListener("click",()=>reveal("#campaign-form"));
     $("#show-order-form")?.addEventListener("click",()=>reveal("#order-form"));
     $$("[data-close-order-form]").forEach(b=>b.addEventListener("click",()=>$("#"+b.dataset.closeOrderForm).hidden=true));
     $("#order-search")?.addEventListener("input",renderOrders);$("#order-status-filter")?.addEventListener("change",renderOrders);
+    $("#order-name-filter").addEventListener("change",renderOrders);
+    $("#print-filtered-orders").addEventListener("click",printOrders);
     $("#order-account-search")?.addEventListener("input",renderOrderPicker);$("#order-account-options")?.addEventListener("change",updateOrderCount);
     $("#email-family-search")?.addEventListener("input",renderFamilies);$("#email-family-options")?.addEventListener("change",updateFamilyCount);
     $("#order-campaign-select")?.addEventListener("change",e=>{const o=e.target.selectedOptions[0];if(o?.dataset.price)$("#order-unit-price").value=(Number(o.dataset.price)/100).toFixed(2)});
