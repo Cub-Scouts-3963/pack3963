@@ -51,3 +51,8 @@
 .ledger-actions{display:flex;gap:9px;margin-bottom:14px}
 .ledger-table-wrap{border:1px solid #d8e0e8;border-radius:7px}
 @media(max-width:680px){.ledger-summary{grid-template-columns:1fr}.ledger-actions{align-items:stretch;flex-direction:column}.ledger-actions .btn-secondary{width:100%}}
+
+.account-picker-option.is-disabled{opacity:.55;cursor:not-allowed}
+.portal-panel[data-panel="orders"] .account-picker-options,.portal-panel[data-panel="communications"] .account-picker-options{max-height:330px}
+#order-email-status{margin:0 0 14px}
+@media(max-width:680px){.portal-panel[data-panel="orders"] .filter-bar .btn-secondary,.portal-panel[data-panel="orders"] .filter-bar .btn-blue{width:100%}}
