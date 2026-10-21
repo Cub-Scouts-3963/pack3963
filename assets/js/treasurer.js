@@ -296,14 +296,14 @@
       const obj = {}; headers.forEach((h, i) => { obj[h] = r[i] ?? ""; });
       const first = pick(obj, ["first name","firstname","member first name"]);
       const last = pick(obj, ["last name","lastname","member last name"]);
-      let name = pick(obj, ["scout name","member name","account name","account","name","participant"]);
+      let name = pick(obj, ["scout name","member name","account name","account","name","participant","member","user name","username"]);
       if (!name) name = [first, last].filter(Boolean).join(" ");
       if (name.includes(",") && !first) { const p = name.split(","); name = `${p.slice(1).join(" ").trim()} ${p[0].trim()}`.trim(); }
       const charge = numberValue(pick(obj, ["charge","charge amount","debit"]));
       const payment = numberValue(pick(obj, ["payment","payment amount","credit","amount paid"]));
       let type = charge ? "charge" : payment ? "payment" : key(pick(obj, ["transaction type","type"])).includes("charge") ? "charge" : "payment";
       const amount = charge || payment || numberValue(pick(obj, ["amount","transaction amount"]));
-      const sourceId = pick(obj, ["payment log id","paymentlogid","transaction id","id"]) || `row-${index + 2}-${key(name)}-${Math.round(amount * 100)}`;
+      const sourceId = pick(obj, ["payment log id","payment log entry id","paymentlogid","transaction id","entry id","id"]) || `row-${index + 2}-${key(name)}-${Math.round(amount * 100)}`;
       const den = pick(obj, ["den","den name","group"]);
       const description = pick(obj, ["description","item","reason","memo","charge description"]) || `Scoutbook ${type}`;
       const bsa = pick(obj, ["bsa member id","member id","memberid","bsaid"]);
@@ -359,7 +359,7 @@
 
   async function submitHandler(form, action, success) {
     status("Saving…");
-    try { await action(form); form.reset(); setDefaults(); form.hidden = true; status(success, "success"); await loadAll(); }
+    try { await action(form); form.reset(); setDefaults(); if (form.classList.contains("collapsible-form")) form.hidden = true; status(success, "success"); await loadAll(); }
     catch (error) { status(error.message || "Unable to save.", "error"); }
   }
 
