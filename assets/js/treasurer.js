@@ -55,6 +55,7 @@
     $("#user-role").textContent = data.role;
     $("#welcome-heading").textContent = `Welcome${data.display_name ? ", " + data.display_name : ""}`;
     const canWrite = ["admin", "treasurer"].includes(data.role);
+    $("#ledger-payment-form").hidden = true;
     $$(".write-control").forEach(el => { el.hidden = !canWrite; });
     $$(".admin-only").forEach(el => { el.hidden = data.role !== "admin"; });
     openTab("dashboard");
@@ -174,6 +175,10 @@
     const account = state.accounts.find(a => a.id === id);
     if (!account) return;
     state.activeLedgerId = id;
+    const paymentForm = $("#ledger-payment-form");
+    if (paymentForm.dataset.accountId !== id) { paymentForm.hidden = true; paymentForm.reset(); delete paymentForm.dataset.paymentId; }
+    paymentForm.dataset.accountId = id;
+    $("#show-ledger-payment").hidden = !account.active || !["admin", "treasurer"].includes(state.access?.role);
     const scope = ledgerScope(account);
     const rows = ledgerRows(account);
     const activeRows = rows.filter(e => !e.voided_at);
@@ -191,6 +196,44 @@
     $("#ledger-table").innerHTML = rows.length ? rows.map(e => `<tr class="${e.voided_at ? "is-voided" : ""}"><td>${esc(e.occurred_on)}</td><td>${esc(accountName(e.account_id))}</td><td><strong>${esc(e.description)}</strong>${e.category ? `<br><small>${esc(e.category)}</small>` : ""}</td><td>${esc(human(e.entry_type))}</td><td class="money">${money(e.amount_cents)}</td><td class="money">${money(e.running_balance_cents)}</td><td>${e.voided_at ? "Removed" : "Posted"}</td></tr>`).join("") : emptyRow(7, "No ledger entries for this account.");
     $("#account-ledger").hidden = false;
     $("#account-ledger").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function openLedgerPayment() {
+    if (!["admin", "treasurer"].includes(state.access?.role)) return;
+    const account = state.accounts.find(a => a.id === state.activeLedgerId);
+    if (!account?.active) return;
+    const form = $("#ledger-payment-form"); form.reset(); form.dataset.accountId = account.id; delete form.dataset.paymentId;
+    form.elements.occurred_on.value = today();
+    $("#ledger-payment-account").textContent = `Payment into ${account.display_name}'s account. Family payments for another Scout must be recorded in that Scout's ledger.`;
+    $("#ledger-payment-charge").innerHTML = '<option value="">General account payment</option>' + state.entries.filter(e => e.account_id === account.id && e.entry_type === "charge" && !e.voided_at).map(e => `<option value="${esc(e.id)}">${esc(e.description)} — ${money(e.amount_cents)}</option>`).join("");
+    status("", "", "#ledger-payment-status"); form.hidden = false;
+  }
+
+  async function saveLedgerPayment(form) {
+    if (!["admin", "treasurer"].includes(state.access?.role)) throw new Error("Only admins and treasurers can record payments.");
+    const account = state.accounts.find(a => a.id === form.dataset.accountId);
+    if (!account?.active) throw new Error("Choose an active account.");
+    const f = new FormData(form), amount = String(f.get("amount") || ""), amount_cents = cents(amount);
+    if (!/^\d+(\.\d{1,2})?$/.test(amount) || !Number.isSafeInteger(amount_cents) || amount_cents <= 0 || amount_cents > 2147483647) throw new Error("Enter a positive amount with no more than two decimal places.");
+    const occurred_on = String(f.get("occurred_on") || "");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(occurred_on) || !Number.isFinite(Date.parse(occurred_on)) || new Date(occurred_on).toISOString().slice(0, 10) !== occurred_on) throw new Error("Enter a valid payment date.");
+    const method = String(f.get("payment_method") || "");
+    if (!["cash", "zelle", "venmo", "check", "card", "bank_transfer", "other"].includes(method)) throw new Error("Choose a payment method.");
+    let charge = null;
+    if (f.get("charge_id")) {
+      const r = await client.from("ledger_entries").select("*").eq("id", f.get("charge_id")).maybeSingle();
+      if (r.error) throw r.error;
+      charge = r.data;
+      if (!charge || charge.account_id !== account.id || charge.entry_type !== "charge" || charge.voided_at) throw new Error("The selected charge is no longer available. Reopen Add payment.");
+    }
+    form.dataset.paymentId ||= crypto.randomUUID();
+    const row = { id: form.dataset.paymentId, account_id: account.id, entry_type: "payment", amount_cents, occurred_on, payment_method: method, description: charge ? `Payment — ${charge.description}` : "Account payment", category: charge?.category || null, order_item_id: charge?.order_item_id || null, reference: String(f.get("reference") || "").trim() || null, notes: String(f.get("notes") || "").trim() || null, source: "manual" };
+    const { error } = await client.from("ledger_entries").insert(row); if (error) throw error;
+    form.hidden = true; form.reset(); delete form.dataset.paymentId;
+    await loadAll();
+    if (state.activeLedgerId === account.id) renderAccountLedger(account.id);
+    window.dispatchEvent(new Event("treasury-ledger-updated"));
+    status(`Payment of ${money(amount_cents)} recorded for ${account.display_name}.`, "success");
   }
 
   function csvCell(value) {
@@ -689,6 +732,15 @@
     });
     $("#close-account-ledger").addEventListener("click", () => { $("#account-ledger").hidden = true; state.activeLedgerId = null; });
     $("#export-ledger-csv").addEventListener("click", exportAccountLedger);
+    $("#show-ledger-payment").addEventListener("click", openLedgerPayment);
+    $("#close-ledger-payment").addEventListener("click", () => { $("#ledger-payment-form").hidden = true; });
+    $("#ledger-payment-form").addEventListener("submit", async e => {
+      e.preventDefault(); const form = e.currentTarget, button = form.querySelector("button[type=submit]");
+      if (button.disabled) return; button.disabled = true;
+      status("Saving payment…", "", "#ledger-payment-status");
+      try { await saveLedgerPayment(form); } catch (error) { status(error.message || "Unable to save payment.", "error", "#ledger-payment-status"); }
+      finally { button.disabled = false; }
+    });
     $("#print-account-ledger").addEventListener("click", () => { try { printAccountLedger(); } catch (error) { status(error.message, "error"); } });
     $("#transactions-table").addEventListener("click", async e => {
       const b = e.target.closest("button"); if (!b) return;
