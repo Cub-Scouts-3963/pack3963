@@ -1,47 +1,40 @@
 ---
 layout: default
-title: Leadership Website Admin – Cub Scout Pack 3963
-description: Secure entry point for authorized Pack 3963 leaders to manage website settings, events, and photos.
+title: Leadership Admin – Cub Scout Pack 3963
+description: Secure entry point for authorized Pack 3963 leaders to manage the website and Pack finances.
 robots: noindex, nofollow
 ---
 
 <header class="page-header">
-    <h1>Leadership Website Admin</h1>
-    <p>Authorized Pack 3963 leaders can manage Pack details, upcoming events, and the public photo gallery here.</p>
-  </header>
+  <h1>Leadership Admin</h1>
+  <p>Authorized Pack 3963 leaders can manage public website content and private Pack finances here.</p>
+</header>
 
-  <main class="section">
-    <div class="section-inner">
-      <div class="callout-box">
-        <h2>Open the website manager</h2>
-        <p>
-          Sign in to Pages CMS, select <strong>brandonweninger/pack3963</strong>,
-          and choose <strong>Pack Settings</strong>, <strong>Events</strong>, or <strong>Photo Gallery</strong>.
-        </p>
-
-        <a
-          href="https://app.pagescms.org/"
-          class="btn-blue"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Sign in to Website Admin
-        </a>
-      </div>
-
-      <h2>Before publishing</h2>
-      <ol>
-        <li>Confirm Pack contact and meeting details are accurate.</li>
-        <li>Keep exactly one upcoming event marked as featured.</li>
-        <li>Use JPG, JPEG, PNG, or WebP images with clear accessibility descriptions.</li>
-        <li>Do not include a child's full name or private family information.</li>
-        <li>Confirm that the Pack has permission to publish each photo.</li>
-        <li>Save the update and confirm the automated site checks pass.</li>
-      </ol>
-
-      <p class="privacy-note">
-        This page links to the protected editing service, but information and photos
-        published through it are public on the Pack website.
-      </p>
+<main class="section">
+  <div class="section-inner">
+    <div class="event-page-switcher">
+      <section class="callout-box">
+        <h2>Website manager</h2>
+        <p>Update Pack settings, events, and the public photo gallery through Pages CMS. Select <strong>Cub-Scouts-3963/pack3963</strong> after signing in.</p>
+        <a href="https://app.pagescms.org/" class="btn-blue" target="_blank" rel="noopener noreferrer">Open Website Admin</a>
+      </section>
+      <section class="callout-box">
+        <h2>Treasurer portal</h2>
+        <p>Track Scout and family balances, charges, payments, Pack expenses, reimbursements, and private receipt files.</p>
+        <a href="{{ '/treasurer.html' | relative_url }}" class="btn-blue">Open Treasurer Portal</a>
+      </section>
     </div>
-  </main>
+
+    <h2>Before publishing public content</h2>
+    <ol>
+      <li>Confirm Pack contact and meeting details are accurate.</li>
+      <li>Keep exactly one upcoming event marked as featured.</li>
+      <li>Use JPG, JPEG, PNG, or WebP images with clear accessibility descriptions.</li>
+      <li>Do not include a child's full name or private family information.</li>
+      <li>Confirm that the Pack has permission to publish each photo.</li>
+      <li>Save the update and confirm the automated site checks pass.</li>
+    </ol>
+
+    <p class="privacy-note">Website-manager content is public after publication. The treasurer portal is private and available only to approved email accounts.</p>
+  </div>
+</main>
