@@ -6,7 +6,7 @@
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: { persistSession: true, detectSessionInUrl: true, autoRefreshToken: true }
   });
-  const state = { user: null, access: null, accounts: [], entries: [], expenses: [], receipts: [], summary: null, users: [], householdContacts: [], importRows: [], rosterRows: [], rosterHouseholds: [], rosterFileName: "" };
+  const state = { user: null, access: null, accounts: [], entries: [], expenses: [], receipts: [], summary: null, users: [], householdContacts: [], importRows: [], rosterRows: [], rosterHouseholds: [], rosterFileName: "", activeLedgerId: null };
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => Array.from(document.querySelectorAll(selector));
   const today = () => new Date().toISOString().slice(0, 10);
@@ -121,12 +121,14 @@
 
   function filteredAccounts() {
     const q = $("#account-search").value.trim().toLowerCase();
-    const filter = $("#balance-filter").value;
+    const statusFilter = $("#balance-filter").value;
+    const typeFilter = $("#account-type-filter").value;
     return state.accounts.filter(a => {
       const hay = [a.display_name, a.den, a.household_name, a.bsa_member_id, a.scoutbook_user_id].join(" ").toLowerCase();
       const b = Number(a.balance_cents);
-      const match = filter === "current" ? a.active : filter === "due" ? b > 0 && a.active : filter === "credit" ? b < 0 && a.active : filter === "paid" ? b === 0 && a.active : filter === "inactive" ? !a.active : true;
-      return (!q || hay.includes(q)) && match;
+      const statusMatch = statusFilter === "current" ? a.active : statusFilter === "due" ? b > 0 && a.active : statusFilter === "credit" ? b < 0 && a.active : statusFilter === "paid" ? b === 0 && a.active : statusFilter === "inactive" ? !a.active : true;
+      const typeMatch = typeFilter === "all" || a.account_type === typeFilter;
+      return (!q || hay.includes(q)) && statusMatch && typeMatch;
     });
   }
 
@@ -142,8 +144,84 @@
       const contactText = contacts.length ? contacts.map(c => c.full_name).join(", ") : "—";
       const familyLine = a.account_type === "scout" && family ? `<br><small>${esc(family.display_name)}</small>` : (a.household_name ? `<br><small>${esc(a.household_name)}</small>` : "");
       const action = canWrite ? `<button class="action-button" data-account-active="${a.active ? "false" : "true"}" data-account-id="${a.id}" type="button">${a.active ? "Remove" : "Restore"}</button>` : "";
-      return `<tr class="${a.active ? "" : "is-voided"}"><td><strong>${esc(a.display_name)}</strong>${familyLine}</td><td><small>${esc(contactText)}</small></td><td>${esc(a.den || "—")}</td><td>${esc(human(a.account_type))}</td><td class="money ${cls}">${money(Math.abs(b))}</td><td><span class="status-pill">${esc(a.active ? label : "Inactive")}</span></td><td class="write-control">${action}</td></tr>`;
-    }).join("") : emptyRow(7, "No matching accounts.");
+      return `<tr class="${a.active ? "" : "is-voided"}"><td><button class="ledger-link" data-view-ledger="${a.id}" type="button"><strong>${esc(a.display_name)}</strong></button>${familyLine}</td><td><small>${esc(contactText)}</small></td><td>${esc(a.den || "—")}</td><td>${esc(human(a.account_type))}</td><td class="money ${cls}">${money(Math.abs(b))}</td><td><span class="status-pill">${esc(a.active ? label : "Inactive")}</span></td><td><button class="action-button" data-view-ledger="${a.id}" type="button">View ledger</button></td><td class="write-control">${action}</td></tr>`;
+    }).join("") : emptyRow(8, "No matching accounts.");
+  }
+
+
+  function ledgerScope(account) {
+    if (account.account_type !== "household") return [account];
+    return [account, ...state.accounts.filter(a => a.parent_account_id === account.id)];
+  }
+
+  function ledgerRows(account) {
+    const ids = new Set(ledgerScope(account).map(a => a.id));
+    let running = 0;
+    return state.entries.filter(e => ids.has(e.account_id)).sort((a, b) =>
+      String(a.occurred_on).localeCompare(String(b.occurred_on)) || String(a.created_at).localeCompare(String(b.created_at))
+    ).map(entry => {
+      const impact = entry.voided_at ? 0 : (entry.entry_type === "charge" ? Number(entry.amount_cents) : -Number(entry.amount_cents));
+      running += impact;
+      return { ...entry, running_balance_cents: running };
+    });
+  }
+
+  function renderAccountLedger(id) {
+    const account = state.accounts.find(a => a.id === id);
+    if (!account) return;
+    state.activeLedgerId = id;
+    const scope = ledgerScope(account);
+    const rows = ledgerRows(account);
+    const activeRows = rows.filter(e => !e.voided_at);
+    const charges = activeRows.filter(e => e.entry_type === "charge").reduce((sum, e) => sum + Number(e.amount_cents), 0);
+    const payments = activeRows.filter(e => e.entry_type !== "charge").reduce((sum, e) => sum + Number(e.amount_cents), 0);
+    const balance = scope.reduce((sum, a) => sum + Number(a.balance_cents || 0), 0);
+    $("#ledger-title").textContent = account.display_name;
+    $("#ledger-meta").textContent = account.account_type === "household"
+      ? `Consolidated family ledger · ${scope.length - 1} linked Scout account${scope.length - 1 === 1 ? "" : "s"}`
+      : `${human(account.account_type)}${account.den ? " · " + account.den : ""}`;
+    $("#ledger-charges").textContent = money(charges);
+    $("#ledger-payments").textContent = money(payments);
+    $("#ledger-balance").textContent = money(balance);
+    $("#ledger-balance").className = balance > 0 ? "balance-due" : balance < 0 ? "balance-credit" : "";
+    $("#ledger-table").innerHTML = rows.length ? rows.map(e => `<tr class="${e.voided_at ? "is-voided" : ""}"><td>${esc(e.occurred_on)}</td><td>${esc(accountName(e.account_id))}</td><td><strong>${esc(e.description)}</strong>${e.category ? `<br><small>${esc(e.category)}</small>` : ""}</td><td>${esc(human(e.entry_type))}</td><td class="money">${money(e.amount_cents)}</td><td class="money">${money(e.running_balance_cents)}</td><td>${e.voided_at ? "Removed" : "Posted"}</td></tr>`).join("") : emptyRow(7, "No ledger entries for this account.");
+    $("#account-ledger").hidden = false;
+    $("#account-ledger").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function csvCell(value) {
+    let text = String(value ?? "");
+    if (/^[=+\-@]/.test(text)) text = "'" + text;
+    return `"${text.replaceAll('"', '""')}"`;
+  }
+
+  function exportAccountLedger() {
+    const account = state.accounts.find(a => a.id === state.activeLedgerId);
+    if (!account) return;
+    const rows = ledgerRows(account);
+    const data = [
+      ["Date","Account","Type","Description","Category","Payment method","Reference","Amount","Running balance","Status","Notes"],
+      ...rows.map(e => [e.occurred_on, accountName(e.account_id), human(e.entry_type), e.description, e.category || "", human(e.payment_method), e.reference || "", (Number(e.amount_cents) / 100).toFixed(2), (Number(e.running_balance_cents) / 100).toFixed(2), e.voided_at ? "Removed" : "Posted", e.notes || ""])
+    ];
+    const blob = new Blob([data.map(row => row.map(csvCell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${account.display_name.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "account"}-ledger.csv`;
+    document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+  }
+
+  function printAccountLedger() {
+    const account = state.accounts.find(a => a.id === state.activeLedgerId);
+    if (!account) return;
+    const popup = window.open("", "_blank");
+    if (!popup) throw new Error("Please allow pop-ups to print this ledger.");
+    const table = $("#account-ledger .ledger-table-wrap").innerHTML;
+    const summary = $(".ledger-summary").innerHTML;
+    popup.document.write(`<!doctype html><html><head><title>${esc(account.display_name)} ledger</title><style>body{font:14px Arial,sans-serif;color:#172b3f;margin:32px}h1{color:#004b93;margin-bottom:4px}.meta{color:#53687c;margin-bottom:24px}.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:20px 0}.summary div{padding:12px;border-top:4px solid #f5c400;background:#f4f7f9}.summary span,.summary strong{display:block}.summary strong{font-size:20px;margin-top:6px}table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #d8e0e8;text-align:left}th{background:#eef2f6}.money{text-align:right}.is-voided{opacity:.55;text-decoration:line-through}@media print{body{margin:0}}</style></head><body><h1>${esc(account.display_name)}</h1><div class="meta">${esc($("#ledger-meta").textContent)}</div><div class="summary">${summary}</div>${table}</body></html>`);
+    popup.document.close();
+    popup.focus();
+    setTimeout(() => popup.print(), 150);
   }
 
   function filteredEntries() {
@@ -195,7 +273,7 @@
   }
 
   function updateAccountPickerCount() {
-    const count = $("#entry-accounts input[type='checkbox']:checked").length;
+    const count = Array.from(document.querySelectorAll("#entry-accounts input[type='checkbox']:checked")).length;
     $("#entry-account-count").textContent = `${count} account${count === 1 ? "" : "s"} selected`;
   }
 
@@ -242,7 +320,7 @@
 
   async function saveEntry(form) {
     const f = new FormData(form);
-    const ids = $("#entry-accounts input[type='checkbox']:checked").map(input => input.value);
+    const ids = Array.from(document.querySelectorAll("#entry-accounts input[type='checkbox']:checked")).map(input => input.value);
     if (!ids.length) throw new Error("Select at least one account.");
     const batch = crypto.randomUUID();
     const rows = ids.map(account_id => ({
@@ -602,15 +680,15 @@
     $$("[data-go-tab]").forEach(b => b.addEventListener("click", () => openTab(b.dataset.goTab)));
     [["#show-account-form","#account-form"],["#show-entry-form","#entry-form"],["#show-expense-form","#expense-form"]].forEach(([button, form]) => $(button).addEventListener("click", () => { $(form).hidden = false; $(form).scrollIntoView({ behavior: "smooth", block: "start" }); }));
     $$("[data-close-form]").forEach(b => b.addEventListener("click", () => { $("#" + b.dataset.closeForm).hidden = true; }));
-    $("#account-search").addEventListener("input", renderAccounts); $("#balance-filter").addEventListener("change", renderAccounts);
+    $("#account-search").addEventListener("input", renderAccounts); $("#account-type-filter").addEventListener("change", renderAccounts); $("#balance-filter").addEventListener("change", renderAccounts);
     $("#entry-account-search").addEventListener("input", filterAccountPicker);
     $("#entry-accounts").addEventListener("change", updateAccountPickerCount);
     $("#select-visible-accounts").addEventListener("click", () => {
-      $("#entry-accounts .account-picker-option:not([hidden]) input[type='checkbox']").forEach(input => { input.checked = true; });
+      Array.from(document.querySelectorAll("#entry-accounts .account-picker-option:not([hidden]) input[type='checkbox']")).forEach(input => { input.checked = true; });
       updateAccountPickerCount();
     });
     $("#clear-entry-accounts").addEventListener("click", () => {
-      $("#entry-accounts input[type='checkbox']").forEach(input => { input.checked = false; });
+      Array.from(document.querySelectorAll("#entry-accounts input[type='checkbox']")).forEach(input => { input.checked = false; });
       updateAccountPickerCount();
     });
     $("#transaction-search").addEventListener("input", renderTransactions); $("#transaction-filter").addEventListener("change", renderTransactions);
@@ -625,10 +703,15 @@
       const f = new FormData(form); const { error } = await client.from("authorized_users").upsert({ email: String(f.get("email")).trim().toLowerCase(), display_name: String(f.get("display_name") || "").trim() || null, role: f.get("role"), active: true }, { onConflict: "email" }); if (error) throw error;
     }, "Access updated."); });
     $("#accounts-table").addEventListener("click", async e => {
+      const ledgerButton = e.target.closest("[data-view-ledger]");
+      if (ledgerButton) { renderAccountLedger(ledgerButton.dataset.viewLedger); return; }
       const b = e.target.closest("button[data-account-id]"); if (!b) return;
       try { await setAccountActive(b.dataset.accountId, b.dataset.accountActive === "true"); }
       catch (error) { status(error.message || "Unable to update the account.", "error"); }
     });
+    $("#close-account-ledger").addEventListener("click", () => { $("#account-ledger").hidden = true; state.activeLedgerId = null; });
+    $("#export-ledger-csv").addEventListener("click", exportAccountLedger);
+    $("#print-account-ledger").addEventListener("click", () => { try { printAccountLedger(); } catch (error) { status(error.message, "error"); } });
     $("#transactions-table").addEventListener("click", async e => {
       const b = e.target.closest("button"); if (!b) return;
       try { if (b.dataset.voidEntry) await voidRecord("ledger_entries", b.dataset.voidEntry); if (b.dataset.restoreEntry) await voidRecord("ledger_entries", b.dataset.restoreEntry, true); } catch (error) { status(error.message, "error"); }
