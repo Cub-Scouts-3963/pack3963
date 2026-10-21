@@ -277,14 +277,7 @@
     $("#entry-account-count").textContent = `${count} account${count === 1 ? "" : "s"} selected`;
   }
 
-  function filterAccountPicker() {
-    const query = $("#entry-account-search").value.trim().toLowerCase();
-    $("#entry-accounts .account-picker-option").forEach(option => {
-      option.hidden = Boolean(query) && !option.dataset.search.includes(query);
-    });
-  }
-
-  function populateAccounts() {
+  function filterAccountPicker() {\n    const query = $("#entry-account-search").value.trim().toLowerCase();\n    Array.from(document.querySelectorAll("#entry-accounts .account-picker-option")).forEach(option => {\n      option.hidden = Boolean(query) && !option.dataset.search.includes(query);\n    });\n  }\n\n  function populateAccounts() {
     $("#entry-accounts").innerHTML = state.accounts.filter(a => a.active).map(a => {
       const type = a.account_type === "household" ? "Family" : a.account_type === "scout" ? "Scout" : "Parent";
       const detail = [type, a.den].filter(Boolean).join(" · ");
