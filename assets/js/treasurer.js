@@ -194,8 +194,27 @@
     $("#access-table").innerHTML = state.users.length ? state.users.map(u => `<tr><td>${esc(u.email)}</td><td>${esc(u.display_name || "—")}</td><td>${esc(human(u.role))}</td><td>${u.active ? "Active" : "Disabled"}</td></tr>`).join("") : emptyRow(4, "No authorized users.");
   }
 
+  function updateAccountPickerCount() {
+    const count = $("#entry-accounts input[type='checkbox']:checked").length;
+    $("#entry-account-count").textContent = `${count} account${count === 1 ? "" : "s"} selected`;
+  }
+
+  function filterAccountPicker() {
+    const query = $("#entry-account-search").value.trim().toLowerCase();
+    $("#entry-accounts .account-picker-option").forEach(option => {
+      option.hidden = Boolean(query) && !option.dataset.search.includes(query);
+    });
+  }
+
   function populateAccounts() {
-    $("#entry-accounts").innerHTML = state.accounts.filter(a => a.active).map(a => `<option value="${a.id}">[${a.account_type === "household" ? "Family" : a.account_type === "scout" ? "Scout" : "Parent"}] ${esc(a.display_name)}${a.den ? " — " + esc(a.den) : ""}</option>`).join("");
+    $("#entry-accounts").innerHTML = state.accounts.filter(a => a.active).map(a => {
+      const type = a.account_type === "household" ? "Family" : a.account_type === "scout" ? "Scout" : "Parent";
+      const detail = [type, a.den].filter(Boolean).join(" · ");
+      const search = [a.display_name, a.household_name, a.den, type].filter(Boolean).join(" ").toLowerCase();
+      return `<label class="account-picker-option" data-search="${esc(search)}"><input type="checkbox" name="account_ids" value="${a.id}"><span><strong>${esc(a.display_name)}</strong><small>${esc(detail)}</small></span></label>`;
+    }).join("");
+    filterAccountPicker();
+    updateAccountPickerCount();
   }
 
   function openTab(name) {
@@ -223,7 +242,7 @@
 
   async function saveEntry(form) {
     const f = new FormData(form);
-    const ids = Array.from($("#entry-accounts").selectedOptions).map(o => o.value);
+    const ids = $("#entry-accounts input[type='checkbox']:checked").map(input => input.value);
     if (!ids.length) throw new Error("Select at least one account.");
     const batch = crypto.randomUUID();
     const rows = ids.map(account_id => ({
@@ -584,6 +603,16 @@
     [["#show-account-form","#account-form"],["#show-entry-form","#entry-form"],["#show-expense-form","#expense-form"]].forEach(([button, form]) => $(button).addEventListener("click", () => { $(form).hidden = false; $(form).scrollIntoView({ behavior: "smooth", block: "start" }); }));
     $$("[data-close-form]").forEach(b => b.addEventListener("click", () => { $("#" + b.dataset.closeForm).hidden = true; }));
     $("#account-search").addEventListener("input", renderAccounts); $("#balance-filter").addEventListener("change", renderAccounts);
+    $("#entry-account-search").addEventListener("input", filterAccountPicker);
+    $("#entry-accounts").addEventListener("change", updateAccountPickerCount);
+    $("#select-visible-accounts").addEventListener("click", () => {
+      $("#entry-accounts .account-picker-option:not([hidden]) input[type='checkbox']").forEach(input => { input.checked = true; });
+      updateAccountPickerCount();
+    });
+    $("#clear-entry-accounts").addEventListener("click", () => {
+      $("#entry-accounts input[type='checkbox']").forEach(input => { input.checked = false; });
+      updateAccountPickerCount();
+    });
     $("#transaction-search").addEventListener("input", renderTransactions); $("#transaction-filter").addEventListener("change", renderTransactions);
     $("#expense-search").addEventListener("input", renderExpenses); $("#expense-filter").addEventListener("change", renderExpenses);
     $("#account-form").addEventListener("submit", e => { e.preventDefault(); submitHandler(e.currentTarget, saveAccount, "Account added."); });
