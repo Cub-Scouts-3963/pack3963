@@ -53,6 +53,8 @@ create unique index if not exists financial_accounts_roster_key_uidx
   on public.financial_accounts(roster_key);
 create index if not exists financial_accounts_parent_account_idx
   on public.financial_accounts(parent_account_id);
+create index if not exists financial_accounts_last_roster_import_idx
+  on public.financial_accounts(last_roster_import_id);
 create unique index if not exists household_contacts_name_uidx
   on public.household_contacts(household_account_id, lower(full_name));
 
