@@ -88,6 +88,12 @@ Open a pull request on GitHub, review the preview or checks, and merge it into `
 
 The **Site checks** workflow builds the Jekyll site and runs `scripts/validate_site.rb`. It catches missing local links, incomplete event/photo data, unsafe new-tab links, duplicate page wrappers, and unwanted repository files.
 
+### Cloudflare Workers builds
+
+The website Worker `pack3963` uses the root `wrangler.jsonc` to serve the Jekyll output in `_site`. Its empty `previews` block enables isolated branch previews. In Cloudflare's Workers Builds settings, both production and preview builds must run `bundle exec jekyll build --strict_front_matter` before their existing `npx wrangler deploy` or `npx wrangler preview` command. Workers Builds does not run a Wrangler custom build command from the configuration file.
+
+The authentication/email Worker is a separate service. Deploy it using `workers/auth-email/wrangler.jsonc`; do not point the website build at that configuration. Deployment configuration, Worker source, and database migrations are excluded from the public Jekyll output.
+
 ## Before opening a pull request
 
 - Run `bundle exec jekyll build` and confirm it completes without errors.

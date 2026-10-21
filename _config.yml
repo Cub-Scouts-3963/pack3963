@@ -11,3 +11,7 @@ exclude:
   - README.md
   - scripts
   - vendor
+  - wrangler.jsonc
+  - workers
+  - cloudflare
+  - supabase
