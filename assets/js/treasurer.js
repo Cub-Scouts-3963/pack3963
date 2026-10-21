@@ -3,6 +3,7 @@
 
   const SUPABASE_URL = "https://buvrqioskjjhszqkpypa.supabase.co";
   const SUPABASE_KEY = "sb_publishable_I15v7OgXeqzJCCg-r7RwRw_ievTWP8V";
+  const INVITATION_API = "https://pack3963-auth-email.cubscouts3963.workers.dev/api/treasurer/invite-user";
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: { persistSession: true, detectSessionInUrl: true, autoRefreshToken: true }
   });
@@ -56,6 +57,7 @@
     const canWrite = ["admin", "treasurer"].includes(data.role);
     $$(".write-control").forEach(el => { el.hidden = !canWrite; });
     $$(".admin-only").forEach(el => { el.hidden = data.role !== "admin"; });
+    openTab("dashboard");
     setDefaults();
     await loadAll();
   }
@@ -99,6 +101,8 @@
     const s = state.summary || {};
     $("#summary-bank").textContent = s.latest_bank_balance_cents == null ? "—" : money(s.latest_bank_balance_cents);
     $("#summary-bank-date").textContent = s.latest_bank_balance_date ? `As of ${s.latest_bank_balance_date}` : "No snapshot yet";
+    $("#bank-current-balance").textContent = $("#summary-bank").textContent;
+    $("#bank-current-date").textContent = s.latest_bank_balance_date ? `As of ${s.latest_bank_balance_date}` : "No balance recorded yet";
     $("#summary-due").textContent = money(s.total_due_cents);
     $("#summary-credits").textContent = money(s.total_credit_cents);
     $("#summary-expenses").textContent = money(s.total_expenses_cents);
@@ -269,7 +273,42 @@
 
   function renderAccess() {
     if (state.access?.role !== "admin") return;
-    $("#access-table").innerHTML = state.users.length ? state.users.map(u => `<tr><td>${esc(u.email)}</td><td>${esc(u.display_name || "—")}</td><td>${esc(human(u.role))}</td><td>${u.active ? "Active" : "Disabled"}</td></tr>`).join("") : emptyRow(4, "No authorized users.");
+    $("#access-table").innerHTML = state.users.length ? state.users.map(u => `<tr><td>${esc(u.email)}</td><td>${esc(u.display_name || "—")}</td><td>${esc(human(u.role))}</td><td>${u.active ? "Active" : "Disabled"}</td><td>${u.active ? `<button type="button" class="btn-secondary" data-invite-user="${esc(u.email)}">Resend invitation</button>` : "—"}</td></tr>`).join("") : emptyRow(5, "No authorized users.");
+  }
+
+  async function sendUserInvitation(email, requestId) {
+    const { data, error } = await client.auth.getSession();
+    if (error || !data.session) throw new Error("Sign in again before sending an invitation.");
+    const response = await fetch(INVITATION_API, {
+      method: "POST", signal: AbortSignal.timeout(30000),
+      headers: { "content-type": "application/json", authorization: "Bearer " + data.session.access_token },
+      body: JSON.stringify({ email, request_id: requestId })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || "The invitation could not be sent.");
+  }
+
+  async function savePortalAccess(form) {
+    const button = form.querySelector('button[type="submit"]');
+    if (button.disabled) return;
+    button.disabled = true;
+    let saved = false;
+    status("Saving access and sending the invitation…", "", "#access-status");
+    try {
+      const f = new FormData(form);
+      const email = String(f.get("email")).trim().toLowerCase();
+      const { error } = await client.from("authorized_users").upsert({ email, display_name: String(f.get("display_name") || "").trim() || null, role: f.get("role"), active: true }, { onConflict: "email" });
+      if (error) throw error;
+      saved = true;
+      form.dataset.invitationRequestId ||= crypto.randomUUID();
+      await sendUserInvitation(email, form.dataset.invitationRequestId);
+      form.reset(); delete form.dataset.invitationRequestId;
+      await loadAll();
+      status(`Access saved. Invitation email accepted for ${email}.`, "success", "#access-status");
+    } catch (error) {
+      if (saved) await loadAll();
+      status(saved ? `Access is saved, but invitation delivery was not confirmed. ${error.message || "Try again."} You can retry this form or use Resend invitation.` : error.message || "Unable to save access.", "error", "#access-status");
+    } finally { button.disabled = false; }
   }
 
   function updateAccountPickerCount() {
@@ -279,7 +318,7 @@
 
   function filterAccountPicker() {
     const query = $("#entry-account-search").value.trim().toLowerCase();
-    $("#entry-accounts .account-picker-option").forEach(option => {
+    Array.from(document.querySelectorAll("#entry-accounts .account-picker-option")).forEach(option => {
       option.hidden = Boolean(query) && !option.dataset.search.includes(query);
     });
   }
@@ -296,6 +335,7 @@
   }
 
   function openTab(name) {
+    if (name === "bank" && !["admin", "treasurer"].includes(state.access?.role)) return;
     $$(".portal-tab").forEach(b => b.classList.toggle("is-active", b.dataset.tab === name));
     $$(".portal-panel").forEach(p => p.classList.toggle("is-active", p.dataset.panel === name));
   }
@@ -584,81 +624,6 @@
     await loadAll();
   }
 
-  function mapImport(text) {
-    const raw = parseCsv(text.replace(/^\uFEFF/, ""));
-    if (raw.length < 2) throw new Error("The CSV does not contain any transaction rows.");
-    const headers = raw[0].map(key);
-    const expanded = [];
-    raw.slice(1).forEach(r => {
-      if (r.length > headers.length) {
-        for (let i = 0; i < r.length; i += headers.length) expanded.push(r.slice(i, i + headers.length));
-      } else expanded.push(r);
-    });
-    const pick = (obj, names) => { for (const n of names) if (obj[key(n)] != null && String(obj[key(n)]).trim()) return String(obj[key(n)]).trim(); return ""; };
-    return expanded.map((r, index) => {
-      const obj = {}; headers.forEach((h, i) => { obj[h] = r[i] ?? ""; });
-      const first = pick(obj, ["first name","firstname","member first name"]);
-      const last = pick(obj, ["last name","lastname","member last name"]);
-      let name = pick(obj, ["scout name","member name","account name","account","name","participant","member","user name","username"]);
-      if (!name) name = [first, last].filter(Boolean).join(" ");
-      if (name.includes(",") && !first) { const p = name.split(","); name = `${p.slice(1).join(" ").trim()} ${p[0].trim()}`.trim(); }
-      const charge = numberValue(pick(obj, ["charge","charge amount","debit"]));
-      const payment = numberValue(pick(obj, ["payment","payment amount","credit","amount paid"]));
-      let type = charge ? "charge" : payment ? "payment" : key(pick(obj, ["transaction type","type"])).includes("charge") ? "charge" : "payment";
-      const amount = charge || payment || numberValue(pick(obj, ["amount","transaction amount"]));
-      const sourceId = pick(obj, ["payment log id","payment log entry id","paymentlogid","transaction id","entry id","id"]) || `row-${index + 2}-${key(name)}-${Math.round(amount * 100)}`;
-      const den = pick(obj, ["den","den name","group"]);
-      const description = pick(obj, ["description","item","reason","memo","charge description"]) || `Scoutbook ${type}`;
-      const bsa = pick(obj, ["bsa member id","member id","memberid","bsaid"]);
-      return { name, den, bsa, type, amount_cents: Math.round(amount * 100), date: dateValue(pick(obj, ["transaction date","date","posted date"])), description, sourceId, raw: obj };
-    }).filter(r => r.name && r.amount_cents > 0);
-  }
-
-  function previewImport(rows) {
-    state.importRows = rows;
-    const charges = rows.filter(r => r.type === "charge").reduce((n, r) => n + r.amount_cents, 0);
-    const payments = rows.filter(r => r.type !== "charge").reduce((n, r) => n + r.amount_cents, 0);
-    $("#import-summary").innerHTML = [
-      ["Rows ready", rows.length], ["Charges", money(charges)], ["Payments", money(payments)]
-    ].map(([label, value]) => `<article class="summary-card"><span>${esc(label)}</span><strong>${esc(value)}</strong></article>`).join("");
-    $("#import-table").innerHTML = rows.slice(0, 100).map(r => `<tr><td>${esc(r.name)}</td><td>${esc(r.den || "—")}</td><td>${esc(human(r.type))}</td><td>${esc(r.description)}</td><td class="money">${money(r.amount_cents)}</td></tr>`).join("");
-    $("#import-preview").hidden = false;
-    status(`Review ${rows.length} mapped rows before importing. The preview shows up to 100.`, "", "#import-status");
-  }
-
-  async function runImport() {
-    if (!state.importRows.length) return;
-    status("Importing accounts and transactions…", "", "#import-status");
-    const existingSource = new Set(state.entries.filter(e => e.source === "scoutbook_import").map(e => e.source_record_id));
-    const accountByName = new Map(state.accounts.map(a => [a.display_name.trim().toLowerCase(), a]));
-    const accountByBsa = new Map(state.accounts.filter(a => a.bsa_member_id).map(a => [a.bsa_member_id, a]));
-    const toInsert = []; let skipped = 0;
-    for (const r of state.importRows) {
-      if (existingSource.has(r.sourceId)) { skipped++; continue; }
-      let account = (r.bsa && accountByBsa.get(r.bsa)) || accountByName.get(r.name.trim().toLowerCase());
-      if (!account) {
-        const leaderLike = /leader|parent|family|guardian/i.test(r.name + " " + r.den);
-        const created = await client.from("financial_accounts").insert({
-          account_type: leaderLike ? "household" : "scout", display_name: r.name, den: r.den || null,
-          bsa_member_id: r.bsa || null, source: undefined
-        }).select().single();
-        if (created.error) throw created.error;
-        account = created.data; accountByName.set(r.name.trim().toLowerCase(), account);
-        if (r.bsa) accountByBsa.set(r.bsa, account);
-      }
-      toInsert.push({
-        account_id: account.id, entry_type: r.type, amount_cents: r.amount_cents, occurred_on: r.date,
-        description: r.description, category: "Scoutbook import", source: "scoutbook_import", source_record_id: r.sourceId,
-        notes: "Imported from Scoutbook Payment Log"
-      });
-    }
-    if (toInsert.length) {
-      const { error } = await client.from("ledger_entries").insert(toInsert); if (error) throw error;
-    }
-    status(`Import complete: ${toInsert.length} added, ${skipped} duplicate${skipped === 1 ? "" : "s"} skipped.`, "success", "#import-status");
-    state.importRows = []; $("#import-preview").hidden = true; $("#csv-file").value = "";
-    await loadAll();
-  }
 
   async function submitHandler(form, action, success) {
     status("Saving…");
@@ -667,6 +632,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", async () => {
+    window.addEventListener("treasury-imported", loadAll);
     setDefaults();
     $("#login-form").addEventListener("submit", async event => {
       event.preventDefault(); status("Sending secure link…", "", "#login-status");
@@ -678,7 +644,7 @@
     $("#refresh-data").addEventListener("click", loadAll);
     $$(".portal-tab").forEach(b => b.addEventListener("click", () => openTab(b.dataset.tab)));
     $$("[data-go-tab]").forEach(b => b.addEventListener("click", () => openTab(b.dataset.goTab)));
-    [["#show-account-form","#account-form"],["#show-entry-form","#entry-form"],["#show-expense-form","#expense-form"]].forEach(([button, form]) => $(button).addEventListener("click", () => { $(form).hidden = false; $(form).scrollIntoView({ behavior: "smooth", block: "start" }); }));
+    [["#show-account-form","#account-form"],["#show-entry-form","#entry-form"],["#show-expense-form","#expense-form"],["#show-bank-form","#bank-form"]].forEach(([button, form]) => $(button).addEventListener("click", () => { $(form).hidden = false; $(form).scrollIntoView({ behavior: "smooth", block: "start" }); }));
     $$("[data-close-form]").forEach(b => b.addEventListener("click", () => { $("#" + b.dataset.closeForm).hidden = true; }));
     $("#account-search").addEventListener("input", renderAccounts); $("#account-type-filter").addEventListener("change", renderAccounts); $("#balance-filter").addEventListener("change", renderAccounts);
     $("#entry-account-search").addEventListener("input", filterAccountPicker);
@@ -699,9 +665,21 @@
     $("#bank-form").addEventListener("submit", e => { e.preventDefault(); submitHandler(e.currentTarget, async form => {
       const f = new FormData(form); const { error } = await client.from("bank_balance_snapshots").insert({ balance_cents: cents(f.get("balance")), as_of_date: f.get("as_of_date"), notes: String(f.get("notes") || "").trim() || null }); if (error) throw error;
     }, "Bank balance snapshot saved."); });
-    $("#access-form").addEventListener("submit", e => { e.preventDefault(); submitHandler(e.currentTarget, async form => {
-      const f = new FormData(form); const { error } = await client.from("authorized_users").upsert({ email: String(f.get("email")).trim().toLowerCase(), display_name: String(f.get("display_name") || "").trim() || null, role: f.get("role"), active: true }, { onConflict: "email" }); if (error) throw error;
-    }, "Access updated."); });
+    $("#access-form").addEventListener("submit", e => { e.preventDefault(); savePortalAccess(e.currentTarget); });
+    $("#access-form").addEventListener("input", e => { delete e.currentTarget.dataset.invitationRequestId; });
+    $("#access-table").addEventListener("click", async e => {
+      const button = e.target.closest("[data-invite-user]");
+      if (!button || button.disabled) return;
+      button.disabled = true;
+      button.dataset.invitationRequestId ||= crypto.randomUUID();
+      status("Sending invitation…", "", "#access-status");
+      try {
+        await sendUserInvitation(button.dataset.inviteUser, button.dataset.invitationRequestId);
+        delete button.dataset.invitationRequestId;
+        status(`Invitation email accepted for ${button.dataset.inviteUser}.`, "success", "#access-status");
+      } catch (error) { status(error.message || "Unable to send invitation. Try again.", "error", "#access-status"); }
+      finally { button.disabled = false; }
+    });
     $("#accounts-table").addEventListener("click", async e => {
       const ledgerButton = e.target.closest("[data-view-ledger]");
       if (ledgerButton) { renderAccountLedger(ledgerButton.dataset.viewLedger); return; }
@@ -733,11 +711,6 @@
       try { await runRosterImport(); }
       catch (error) { status(error.message || "Unable to update the roster.", "error", "#roster-status"); }
     });
-    $("#csv-file").addEventListener("change", async e => {
-      const file = e.target.files[0]; if (!file) return;
-      try { previewImport(mapImport(await file.text())); } catch (error) { status(error.message, "error", "#import-status"); }
-    });
-    $("#run-import").addEventListener("click", async () => { try { await runImport(); } catch (error) { status(error.message, "error", "#import-status"); } });
     const { data } = await client.auth.getSession();
     if (data.session) await authorize(data.session);
     client.auth.onAuthStateChange((event, session) => { if (event === "SIGNED_IN" && session && state.user?.id !== session.user.id) setTimeout(() => authorize(session), 0); });

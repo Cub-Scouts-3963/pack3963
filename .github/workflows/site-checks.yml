@@ -26,3 +26,11 @@ jobs:
 
       - name: Validate site source
         run: ruby scripts/validate_site.rb
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Verify Treasury invitations
+        run: node --test scripts/treasury-*.test.mjs

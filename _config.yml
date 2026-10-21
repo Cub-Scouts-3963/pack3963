@@ -1,7 +1,7 @@
 title: "Cub Scout Pack 3963"
 url: "https://www.pack3963.com"
 baseurl: ""
-asset_version: "20261021-1"
+asset_version: "20261021-templates-1"
 
 markdown: kramdown
 announcement_enabled: true
@@ -11,3 +11,7 @@ exclude:
   - README.md
   - scripts
   - vendor
+  - wrangler.jsonc
+  - workers
+  - cloudflare
+  - supabase

@@ -88,7 +88,21 @@ Open a pull request on GitHub, review the preview or checks, and merge it into `
 
 The **Site checks** workflow builds the Jekyll site and runs `scripts/validate_site.rb`. It catches missing local links, incomplete event/photo data, unsafe new-tab links, duplicate page wrappers, and unwanted repository files.
 
+### Cloudflare Workers builds
+
+The website Worker `pack3963` uses the root `wrangler.jsonc` to serve the Jekyll output in `_site`. Its empty `previews` block enables isolated branch previews. In Cloudflare's Workers Builds settings, both production and preview builds must run `bundle exec ruby -EUTF-8 -S jekyll build --strict_front_matter` before their existing `npx wrangler deploy` or `npx wrangler preview` command. The explicit UTF-8 setting prevents Sass from rejecting Unicode characters under the build environment's default US-ASCII encoding. Workers Builds does not run a Wrangler custom build command from the configuration file.
+
+The authentication/email Worker is a separate service. Deploy it using `workers/auth-email/wrangler.jsonc`; do not point the website build at that configuration. Deployment configuration, Worker source, and database migrations are excluded from the public Jekyll output.
+
 ## Before opening a pull request
+
+### Treasury spreadsheets
+
+Under **Import**, admins and treasurers can download Excel or CSV entry templates prefilled with current Scout/family accounts and existing charge purposes. Payment and credit templates retain existing charge/order links; new-charge templates add account ledger entries. Create quantity/size orders under **Orders** first. Leave unused amounts blank, keep names and hidden IDs unchanged, and upload the completed template to review rows and totals before posting.
+
+Repeated uploads skip previously imported Record IDs. Changed values for an imported ID are rejected; possible duplicate transactions start unselected. Invalid rows block the batch. Use a fresh template for additional transactions. Financial templates never create accounts or replace balances. Roster imports remain separate.
+
+Exports provide current account balances, full transaction history (including removed entries), Pack expenses, and order/payment status in Excel or CSV. Reports cannot be imported as new entries. Excel support loads on demand; CSV remains available if the external Excel library cannot load. Templates and reports contain private financial information and must remain within authorized Pack leadership.
 
 - Run `bundle exec jekyll build` and confirm it completes without errors.
 - Open the changed pages on both desktop and mobile widths.

@@ -48,6 +48,9 @@ styles:
       <button class="portal-tab" type="button" data-tab="accounts">Scouts &amp; accounts</button>
       <button class="portal-tab" type="button" data-tab="transactions">Charges &amp; payments</button>
       <button class="portal-tab" type="button" data-tab="expenses">Expenses &amp; receipts</button>
+      <button class="portal-tab" type="button" data-tab="orders">Orders</button>
+      <button class="portal-tab" type="button" data-tab="communications">Family emails</button>
+      <button class="portal-tab write-control" type="button" data-tab="bank">Bank balance</button>
       <button class="portal-tab" type="button" data-tab="import">Import</button>
       <button class="portal-tab admin-only" type="button" data-tab="access">Access</button>
     </nav>
@@ -55,27 +58,31 @@ styles:
 
     <section class="portal-panel is-active" data-panel="dashboard">
       <div class="summary-grid">
-        <article class="summary-card"><span>Bank balance</span><strong id="summary-bank">—</strong><small id="summary-bank-date">No snapshot yet</small></article>
+        <article class="summary-card"><span>Bank balance</span><strong id="summary-bank">—</strong><small id="summary-bank-date">No snapshot yet</small><button class="text-button write-control" type="button" data-go-tab="bank">Manage balance</button></article>
         <article class="summary-card"><span>Balances due</span><strong id="summary-due">—</strong><small id="summary-due-count"></small></article>
         <article class="summary-card"><span>Account credits</span><strong id="summary-credits">—</strong><small id="summary-credit-count"></small></article>
         <article class="summary-card"><span>Pack expenses</span><strong id="summary-expenses">—</strong><small id="summary-reimbursements"></small></article>
       </div>
-      <div class="portal-grid portal-grid--two">
-        <article class="card">
-          <h3>Record bank balance</h3>
-          <form id="bank-form" class="portal-form">
-            <label>Balance<input name="balance" type="number" min="-999999" step="0.01" required></label>
-            <label>As of<input name="as_of_date" type="date" required></label>
-            <label>Notes<textarea name="notes" rows="2"></textarea></label>
-            <button class="btn-blue write-control" type="submit">Save balance snapshot</button>
-          </form>
-        </article>
-        <article class="card"><h3>Current priorities</h3><ul class="dashboard-list" id="priority-list"></ul></article>
-      </div>
+      <article class="card"><h3>Current priorities</h3><ul class="dashboard-list" id="priority-list"></ul></article>
       <article class="card">
         <div class="card-heading-row"><h3>Recent activity</h3><button class="text-button" type="button" data-go-tab="transactions">View all</button></div>
         <div class="table-wrap"><table><thead><tr><th>Date</th><th>Account</th><th>Type</th><th>Description</th><th class="money">Amount</th></tr></thead><tbody id="recent-activity"></tbody></table></div>
       </article>
+    </section>
+
+    <section class="portal-panel write-control" data-panel="bank" aria-labelledby="bank-heading">
+      <article class="card">
+        <div class="card-heading-row"><h3 id="bank-heading">Bank balance</h3><button class="btn-blue" id="show-bank-form" type="button">Update balance</button></div>
+        <p>Record the balance shown by the Pack's bank account or statement. This dated snapshot is separate from Scout and family balances; recording charges or payments does not automatically change it.</p>
+        <div class="bank-balance-current"><strong id="bank-current-balance">—</strong><span id="bank-current-date">No balance recorded yet</span></div>
+      </article>
+      <form id="bank-form" class="card portal-form collapsible-form" hidden>
+        <div class="card-heading-row"><h3>Update bank balance</h3><button class="text-button" type="button" data-close-form="bank-form">Cancel</button></div>
+        <label>Balance<input name="balance" type="number" min="-999999" step="0.01" required></label>
+        <label>As of<input name="as_of_date" type="date" required></label>
+        <label>Notes<textarea name="notes" rows="2"></textarea></label>
+        <button class="btn-blue" type="submit">Save balance snapshot</button>
+      </form>
     </section>
 
     <section class="portal-panel" data-panel="accounts">
@@ -185,6 +192,57 @@ styles:
       <div class="table-wrap card"><table><thead><tr><th>Date</th><th>Vendor</th><th>Type / status</th><th>Paid by</th><th>Receipt</th><th class="money">Amount</th><th class="write-control">Action</th></tr></thead><tbody id="expenses-table"></tbody></table></div>
     </section>
 
+
+    <section class="portal-panel" data-panel="orders">
+      <div class="filter-bar">
+        <input id="order-search" type="search" placeholder="Search order, Scout, family, or size">
+        <select id="order-status-filter"><option value="all">All order statuses</option><option value="unpaid">Unpaid</option><option value="partial">Partially paid</option><option value="paid">Paid</option></select>
+        <button class="btn-secondary write-control" id="show-campaign-form" type="button">Create order</button>
+        <button class="btn-blue write-control" id="show-order-form" type="button">Assign order</button>
+      </div>
+      <p id="order-email-status" class="form-status" role="status"></p>
+      <form id="campaign-form" class="card portal-form collapsible-form" hidden>
+        <div class="card-heading-row"><h3>Create a reusable order</h3><button class="text-button" type="button" data-close-order-form="campaign-form">Close</button></div>
+        <p>Create something families can purchase or attend—shirts, camping food, outings, or another Pack item.</p>
+        <div class="form-grid">
+          <label>Order name<input name="name" required placeholder="Winter cabin trip"></label>
+          <label>Category<input name="category" required placeholder="Camping"></label>
+          <label>Price per item<input name="unit_price" type="number" min="0" step="0.01" required></label>
+          <label>Payment due<input name="due_on" type="date"></label>
+        </div>
+        <label>Description<textarea name="description" rows="2"></textarea></label>
+        <button class="btn-blue" type="submit">Create order</button>
+      </form>
+      <form id="order-form" class="card portal-form collapsible-form" hidden>
+        <div class="card-heading-row"><h3>Assign an order and charge</h3><button class="text-button" type="button" data-close-order-form="order-form">Close</button></div>
+        <div class="form-grid">
+          <label>Order<select id="order-campaign-select" name="campaign_id" required></select></label>
+          <label>Quantity<input name="quantity" type="number" min="1" value="1" required></label>
+          <label>Price per item<input id="order-unit-price" name="unit_price" type="number" min="0" step="0.01" required></label>
+          <label>Ordered for<input name="ordered_for" placeholder="Scout or family member"></label>
+          <label>Size / option<input name="item_variant" placeholder="Youth M, cabin, meal choice"></label>
+        </div>
+        <div class="account-picker-field"><span class="field-label">Assign to one or more Scouts or families</span><div class="account-picker"><div class="account-picker-toolbar"><input id="order-account-search" type="search" placeholder="Find a Scout or family"></div><div class="account-picker-options" id="order-account-options"></div><small id="order-account-count">0 accounts selected</small></div></div>
+        <label>Notes<textarea name="notes" rows="2"></textarea></label>
+        <button class="btn-blue" type="submit">Assign order and post charge</button>
+      </form>
+      <div class="table-wrap card"><table><thead><tr><th>Order</th><th>Account</th><th>Ordered for</th><th>Qty.</th><th>Size / option</th><th class="money">Total</th><th>Status</th></tr></thead><tbody id="orders-table"></tbody></table></div>
+    </section>
+
+    <section class="portal-panel" data-panel="communications">
+      <article class="card">
+        <p class="page-kicker">Invoices and family updates</p><h3>Write to selected families</h3>
+        <p>Invoice emails automatically include the family’s current Pack balance. Recipients come only from saved family contacts, and every send is recorded below.</p>
+        <form id="email-form" class="portal-form">
+          <div class="form-grid"><label>Email type<select name="message_type"><option value="invoice">Invoice / balance notice</option><option value="custom">Custom family email</option></select></label><label>Subject<input name="subject" required placeholder="Pack 3963 account update"></label></div>
+          <label>Message<textarea name="body_text" rows="6" required placeholder="Here is an update about your Pack account..."></textarea></label>
+          <div class="account-picker-field"><span class="field-label">Families</span><div class="account-picker"><div class="account-picker-toolbar"><input id="email-family-search" type="search" placeholder="Find a family"></div><div class="account-picker-options" id="email-family-options"></div><small id="email-family-count">0 families selected</small></div></div>
+          <button class="btn-blue write-control" type="submit">Review confirmation and send</button>
+        </form>
+      </article>
+      <article class="card"><h3>Email history</h3><div class="table-wrap"><table><thead><tr><th>Sent</th><th>Subject / sender</th><th>Type</th><th>Recipients</th><th>Status</th></tr></thead><tbody id="email-history-table"></tbody></table></div></article>
+    </section>
+
     <section class="portal-panel" data-panel="import">
       <article class="card">
         <p class="page-kicker">Annual roster</p>
@@ -200,30 +258,51 @@ styles:
         <p class="form-status" id="roster-status" role="status"></p>
       </article>
 
-      <article class="card">
-        <p class="page-kicker">Scoutbook financial history</p>
-        <h3>Import a Payment Log CSV</h3>
-        <p>The file is processed in your browser and sent only to the private Pack database. Existing source IDs are skipped, so the same report can be safely checked again.</p>
-        <label class="file-drop">Choose Scoutbook Payment Log CSV<input id="csv-file" type="file" accept=".csv,text/csv"></label>
-        <div id="import-preview" hidden>
-          <div class="summary-grid summary-grid--compact" id="import-summary"></div>
-          <div class="table-wrap"><table><thead><tr><th>Account</th><th>Den</th><th>Type</th><th>Description</th><th class="money">Amount</th></tr></thead><tbody id="import-table"></tbody></table></div>
-          <button class="btn-blue write-control" id="run-import" type="button">Import reviewed rows</button>
+      <article class="card write-control">
+        <p class="page-kicker">Spreadsheet templates</p>
+        <h3>Download a prefilled entry template</h3>
+        <p>Choose what the entries are for. Scout and family names, account IDs, and existing charge names come from the portal. Amounts start blank so downloading a template does not repeat existing charges.</p>
+        <div class="form-grid portal-form">
+          <label>Charge purpose<select id="template-purpose" aria-label="Template charge purpose"></select></label>
+          <label>Entry type<select id="template-type"><option value="payment">Payment against existing charges</option><option value="credit">Credit against existing charges</option><option value="charge">New charge</option></select></label>
+          <label>Accounts<select id="template-account-type"><option value="all">Scouts and families</option><option value="scout">Scouts only</option><option value="household">Families only</option></select></label>
+          <label>File format<select id="transfer-format"><option value="xlsx">Excel workbook (.xlsx)</option><option value="csv">CSV for Excel (.csv)</option></select></label>
         </div>
-        <p class="form-status" id="import-status" role="status"></p>
+        <p><button class="btn-blue" id="download-entry-template" type="button">Download entry template</button></p>
+        <p>Fill the amount, date, payment method, reference, and notes as needed. Leave unused amounts blank. For another transaction, download a fresh template. Create new orders with quantities and sizes under Orders.</p>
+        <label class="file-drop">Upload the completed Pack template<input id="template-file" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"></label>
+        <div id="transfer-review" hidden>
+          <h3>Review before posting</h3>
+          <p id="transfer-totals" role="status"></p>
+          <div class="table-wrap transfer-review-wrap"><table><thead><tr><th>Include</th><th>Row</th><th>Scout / account</th><th>Charge purpose</th><th>Type</th><th>Date</th><th class="money">Amount</th><th>Review</th></tr></thead><tbody id="transfer-review-table"></tbody></table></div>
+          <p>Possible duplicates start excluded. Fix invalid rows in the file and upload it again before posting. Imports add transactions; they do not replace existing records or balances.</p>
+          <button class="btn-blue" id="post-template" type="button" disabled>Post selected transactions</button>
+        </div>
       </article>
+      <article class="card">
+        <h3>Export reports</h3>
+        <p>Download current records for Kevin or other authorized leaders. Reports cannot be imported as new transactions. Individual account ledgers also have CSV and print/PDF options.</p>
+        <div class="form-grid portal-form">
+          <label>Report<select id="export-kind"><option value="transactions">Transaction history</option><option value="accounts">Scout and family balances</option><option value="expenses">Pack expenses</option><option value="orders">Orders and payment status</option></select></label>
+          <label>File format<select id="export-format"><option value="xlsx">Excel workbook (.xlsx)</option><option value="csv">CSV for Excel (.csv)</option></select></label>
+        </div>
+        <p><button class="btn-secondary" id="export-report" type="button">Export report</button></p>
+      </article>
+      <p class="form-status" id="transfer-status" role="status"></p>
     </section>
 
     <section class="portal-panel admin-only" data-panel="access">
       <article class="card">
         <h3>Authorized users</h3>
+        <p>Save access to email a welcome invitation with the user's role, sign-in steps, and a dashboard guide. Existing users can be invited again using Resend invitation.</p>
         <form id="access-form" class="inline-form portal-form">
-          <label>Email<input name="email" type="email" required></label>
-          <label>Name<input name="display_name"></label>
+          <label>Email<input name="email" type="email" maxlength="320" required></label>
+          <label>Name<input name="display_name" maxlength="120"></label>
           <label>Role<select name="role"><option value="treasurer">Treasurer</option><option value="viewer">View only</option><option value="admin">Administrator</option></select></label>
-          <button class="btn-blue" type="submit">Add or update</button>
+          <button class="btn-blue" type="submit">Save access &amp; send invitation</button>
         </form>
-        <div class="table-wrap"><table><thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th></tr></thead><tbody id="access-table"></tbody></table></div>
+        <p class="form-status" id="access-status" role="status"></p>
+        <div class="table-wrap"><table><thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>Invitation</th></tr></thead><tbody id="access-table"></tbody></table></div>
       </article>
     </section>
   </div>
@@ -231,3 +310,5 @@ styles:
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js"></script>
 <script src="{{ '/assets/js/treasurer.js' | relative_url }}?v={{ site.asset_version }}"></script>
+<script src="{{ '/assets/js/treasurer-orders.js' | relative_url }}?v={{ site.asset_version }}"></script>
+<script type="module" src="{{ '/assets/js/treasurer-transfers.mjs' | relative_url }}?v={{ site.asset_version }}"></script>
