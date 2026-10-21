@@ -198,7 +198,7 @@
   async function saveAccount(form) {
     const f = new FormData(form);
     const row = Object.fromEntries(["account_type","display_name","den","household_name","bsa_member_id","scoutbook_user_id","contact_email","notes"].map(k => [k, String(f.get(k) || "").trim() || null]));
-    checked(...Object.values(await client.from("financial_accounts").insert(row)).reverse());
+    const { error } = await client.from("financial_accounts").insert(row); if (error) throw error;
   }
 
   async function saveEntry(form) {
