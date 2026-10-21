@@ -1,4 +1,4 @@
-
+import { invitationEmail } from "./invitation.mjs";
 const ACTIONS = {
   signup: ["Your one-time Pack 3963 sign-in link", "TREASURER PORTAL", "Here is your one-time sign-in link", "Use the secure button below to sign in to the Cub Scout Pack 3963 Treasurer Portal.", "Sign in to the Treasurer Portal"],
   magiclink: ["Your one-time Pack 3963 sign-in link", "TREASURER PORTAL", "Here is your one-time sign-in link", "Use the secure button below to sign in to the Cub Scout Pack 3963 Treasurer Portal.", "Sign in to the Treasurer Portal"],
@@ -16,6 +16,11 @@ export default {
     const url = new URL(request.url);
     if (request.method === "GET" && url.pathname === "/health") {
       return Response.json({ ok: true, service: "pack3963-auth-email" });
+    }
+    if (url.pathname === "/api/treasurer/invite-user") {
+      if (request.method === "OPTIONS") return corsResponse(request, null, 204);
+      if (request.method === "POST") return handleUserInvitation(request, env);
+      return corsResponse(request, { error: "method_not_allowed" }, 405);
     }
     if (request.method === "OPTIONS" && url.pathname === "/api/treasurer/send-email") return corsResponse(request, null, 204);
     if (request.method === "POST" && url.pathname === "/api/treasurer/send-email") return handleTreasurerEmail(request, env);
@@ -79,6 +84,64 @@ export default {
 
 
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_I15v7OgXeqzJCCg-r7RwRw_ievTWP8V";
+async function handleUserInvitation(request, env) {
+  if (!allowedOrigin(request)) return corsResponse(request, { error: "origin_not_allowed" }, 403);
+  const authorization = request.headers.get("authorization") || "";
+  if (!/^Bearer\s+\S+$/i.test(authorization)) return corsResponse(request, { error: "Sign in again before sending an invitation." }, 401);
+  const token = authorization.replace(/^Bearer\s+/i, "");
+  try {
+    const auth = await fetch(env.SUPABASE_URL + "/auth/v1/user", {
+      headers: { apikey: SUPABASE_PUBLISHABLE_KEY, authorization }, signal: AbortSignal.timeout(10000)
+    });
+    if (!auth.ok) return corsResponse(request, { error: "Your session expired. Sign in again." }, 401);
+    const actor = await auth.json();
+    const access = await sbFetch(env, token, "authorized_users?select=role,active&email=eq." + encodeURIComponent(String(actor.email || "").toLowerCase()) + "&active=eq.true");
+    if (access[0]?.role !== "admin") return corsResponse(request, { error: "Only an active administrator can invite users." }, 403);
+    if (Number(request.headers.get("content-length") || 0) > 4096) return corsResponse(request, { error: "Invitation request is too large." }, 413);
+    // Bound streamed bodies too; Content-Length is optional and untrusted.
+    const reader = request.body?.getReader();
+    const chunks = []; let size = 0;
+    if (reader) {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        size += value.byteLength;
+        if (size > 4096) { await reader.cancel(); return corsResponse(request, { error: "Invitation request is too large." }, 413); }
+        chunks.push(value);
+      }
+    }
+    const bytes = new Uint8Array(size); let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+    let payload;
+    try { payload = JSON.parse(new TextDecoder().decode(bytes)); }
+    catch { return corsResponse(request, { error: "Invalid invitation request." }, 400); }
+    const email = typeof payload?.email === "string" ? payload.email.trim().toLowerCase() : "";
+    if (!validEmail(email) || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload?.request_id || "")) {
+      return corsResponse(request, { error: "A valid email and request ID are required." }, 400);
+    }
+    // Read recipient and role from the approved access list, never from browser claims.
+    const users = await sbFetch(env, token, "authorized_users?select=email,display_name,role,active&email=eq." + encodeURIComponent(email) + "&active=eq.true");
+    const user = users[0];
+    if (!user || !["admin", "treasurer", "viewer"].includes(user.role)) return corsResponse(request, { error: "Save active portal access for this user before sending an invitation." }, 400);
+    const message = invitationEmail(user, env.SUPPORT_EMAIL);
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify([actor.id, payload.request_id, user.email, user.display_name, user.role])));
+    const key = "portal-invite-" + Array.from(new Uint8Array(digest), n => n.toString(16).padStart(2, "0")).join("");
+    const sent = await fetch("https://api.resend.com/emails", {
+      method: "POST", signal: AbortSignal.timeout(15000),
+      headers: { authorization: "Bearer " + env.RESEND_API_KEY, "content-type": "application/json", "idempotency-key": key },
+      body: JSON.stringify({ from: env.FROM_EMAIL, to: [user.email], reply_to: env.SUPPORT_EMAIL, ...message })
+    });
+    if (!sent.ok) {
+      console.warn(JSON.stringify({ event: "portal_invitation_failed", provider_status: sent.status }));
+      return corsResponse(request, { error: "Invitation could not be sent. Access is saved; use Resend invitation to retry." }, 502);
+    }
+    console.log(JSON.stringify({ event: "portal_invitation_accepted" }));
+    return corsResponse(request, { ok: true });
+  } catch {
+    console.error(JSON.stringify({ event: "portal_invitation_failed", reason: "request_failed" }));
+    return corsResponse(request, { error: "Unable to confirm invitation delivery. Use Resend invitation to retry." }, 502);
+  }
+}
 const ALLOWED_ORIGINS = ["https://pack3963.com","https://www.pack3963.com","https://pack3963.pages.dev"];
 function allowedOrigin(request) {
   const o=request.headers.get("origin")||"";

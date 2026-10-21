@@ -3,6 +3,7 @@
 
   const SUPABASE_URL = "https://buvrqioskjjhszqkpypa.supabase.co";
   const SUPABASE_KEY = "sb_publishable_I15v7OgXeqzJCCg-r7RwRw_ievTWP8V";
+  const INVITATION_API = "https://pack3963-auth-email.cubscouts3963.workers.dev/api/treasurer/invite-user";
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: { persistSession: true, detectSessionInUrl: true, autoRefreshToken: true }
   });
@@ -269,7 +270,42 @@
 
   function renderAccess() {
     if (state.access?.role !== "admin") return;
-    $("#access-table").innerHTML = state.users.length ? state.users.map(u => `<tr><td>${esc(u.email)}</td><td>${esc(u.display_name || "—")}</td><td>${esc(human(u.role))}</td><td>${u.active ? "Active" : "Disabled"}</td></tr>`).join("") : emptyRow(4, "No authorized users.");
+    $("#access-table").innerHTML = state.users.length ? state.users.map(u => `<tr><td>${esc(u.email)}</td><td>${esc(u.display_name || "—")}</td><td>${esc(human(u.role))}</td><td>${u.active ? "Active" : "Disabled"}</td><td>${u.active ? `<button type="button" class="btn-secondary" data-invite-user="${esc(u.email)}">Resend invitation</button>` : "—"}</td></tr>`).join("") : emptyRow(5, "No authorized users.");
+  }
+
+  async function sendUserInvitation(email, requestId) {
+    const { data, error } = await client.auth.getSession();
+    if (error || !data.session) throw new Error("Sign in again before sending an invitation.");
+    const response = await fetch(INVITATION_API, {
+      method: "POST", signal: AbortSignal.timeout(30000),
+      headers: { "content-type": "application/json", authorization: "Bearer " + data.session.access_token },
+      body: JSON.stringify({ email, request_id: requestId })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || "The invitation could not be sent.");
+  }
+
+  async function savePortalAccess(form) {
+    const button = form.querySelector('button[type="submit"]');
+    if (button.disabled) return;
+    button.disabled = true;
+    let saved = false;
+    status("Saving access and sending the invitation…", "", "#access-status");
+    try {
+      const f = new FormData(form);
+      const email = String(f.get("email")).trim().toLowerCase();
+      const { error } = await client.from("authorized_users").upsert({ email, display_name: String(f.get("display_name") || "").trim() || null, role: f.get("role"), active: true }, { onConflict: "email" });
+      if (error) throw error;
+      saved = true;
+      form.dataset.invitationRequestId ||= crypto.randomUUID();
+      await sendUserInvitation(email, form.dataset.invitationRequestId);
+      form.reset(); delete form.dataset.invitationRequestId;
+      await loadAll();
+      status(`Access saved. Invitation email accepted for ${email}.`, "success", "#access-status");
+    } catch (error) {
+      if (saved) await loadAll();
+      status(saved ? `Access is saved, but invitation delivery was not confirmed. ${error.message || "Try again."} You can retry this form or use Resend invitation.` : error.message || "Unable to save access.", "error", "#access-status");
+    } finally { button.disabled = false; }
   }
 
   function updateAccountPickerCount() {
@@ -699,9 +735,21 @@
     $("#bank-form").addEventListener("submit", e => { e.preventDefault(); submitHandler(e.currentTarget, async form => {
       const f = new FormData(form); const { error } = await client.from("bank_balance_snapshots").insert({ balance_cents: cents(f.get("balance")), as_of_date: f.get("as_of_date"), notes: String(f.get("notes") || "").trim() || null }); if (error) throw error;
     }, "Bank balance snapshot saved."); });
-    $("#access-form").addEventListener("submit", e => { e.preventDefault(); submitHandler(e.currentTarget, async form => {
-      const f = new FormData(form); const { error } = await client.from("authorized_users").upsert({ email: String(f.get("email")).trim().toLowerCase(), display_name: String(f.get("display_name") || "").trim() || null, role: f.get("role"), active: true }, { onConflict: "email" }); if (error) throw error;
-    }, "Access updated."); });
+    $("#access-form").addEventListener("submit", e => { e.preventDefault(); savePortalAccess(e.currentTarget); });
+    $("#access-form").addEventListener("input", e => { delete e.currentTarget.dataset.invitationRequestId; });
+    $("#access-table").addEventListener("click", async e => {
+      const button = e.target.closest("[data-invite-user]");
+      if (!button || button.disabled) return;
+      button.disabled = true;
+      button.dataset.invitationRequestId ||= crypto.randomUUID();
+      status("Sending invitation…", "", "#access-status");
+      try {
+        await sendUserInvitation(button.dataset.inviteUser, button.dataset.invitationRequestId);
+        delete button.dataset.invitationRequestId;
+        status(`Invitation email accepted for ${button.dataset.inviteUser}.`, "success", "#access-status");
+      } catch (error) { status(error.message || "Unable to send invitation. Try again.", "error", "#access-status"); }
+      finally { button.disabled = false; }
+    });
     $("#accounts-table").addEventListener("click", async e => {
       const ledgerButton = e.target.closest("[data-view-ledger]");
       if (ledgerButton) { renderAccountLedger(ledgerButton.dataset.viewLedger); return; }
