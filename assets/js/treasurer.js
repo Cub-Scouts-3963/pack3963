@@ -57,6 +57,7 @@
     const canWrite = ["admin", "treasurer"].includes(data.role);
     $$(".write-control").forEach(el => { el.hidden = !canWrite; });
     $$(".admin-only").forEach(el => { el.hidden = data.role !== "admin"; });
+    openTab("dashboard");
     setDefaults();
     await loadAll();
   }
@@ -100,6 +101,8 @@
     const s = state.summary || {};
     $("#summary-bank").textContent = s.latest_bank_balance_cents == null ? "—" : money(s.latest_bank_balance_cents);
     $("#summary-bank-date").textContent = s.latest_bank_balance_date ? `As of ${s.latest_bank_balance_date}` : "No snapshot yet";
+    $("#bank-current-balance").textContent = $("#summary-bank").textContent;
+    $("#bank-current-date").textContent = s.latest_bank_balance_date ? `As of ${s.latest_bank_balance_date}` : "No balance recorded yet";
     $("#summary-due").textContent = money(s.total_due_cents);
     $("#summary-credits").textContent = money(s.total_credit_cents);
     $("#summary-expenses").textContent = money(s.total_expenses_cents);
@@ -332,6 +335,7 @@
   }
 
   function openTab(name) {
+    if (name === "bank" && !["admin", "treasurer"].includes(state.access?.role)) return;
     $$(".portal-tab").forEach(b => b.classList.toggle("is-active", b.dataset.tab === name));
     $$(".portal-panel").forEach(p => p.classList.toggle("is-active", p.dataset.panel === name));
   }
@@ -714,7 +718,7 @@
     $("#refresh-data").addEventListener("click", loadAll);
     $$(".portal-tab").forEach(b => b.addEventListener("click", () => openTab(b.dataset.tab)));
     $$("[data-go-tab]").forEach(b => b.addEventListener("click", () => openTab(b.dataset.goTab)));
-    [["#show-account-form","#account-form"],["#show-entry-form","#entry-form"],["#show-expense-form","#expense-form"]].forEach(([button, form]) => $(button).addEventListener("click", () => { $(form).hidden = false; $(form).scrollIntoView({ behavior: "smooth", block: "start" }); }));
+    [["#show-account-form","#account-form"],["#show-entry-form","#entry-form"],["#show-expense-form","#expense-form"],["#show-bank-form","#bank-form"]].forEach(([button, form]) => $(button).addEventListener("click", () => { $(form).hidden = false; $(form).scrollIntoView({ behavior: "smooth", block: "start" }); }));
     $$("[data-close-form]").forEach(b => b.addEventListener("click", () => { $("#" + b.dataset.closeForm).hidden = true; }));
     $("#account-search").addEventListener("input", renderAccounts); $("#account-type-filter").addEventListener("change", renderAccounts); $("#balance-filter").addEventListener("change", renderAccounts);
     $("#entry-account-search").addEventListener("input", filterAccountPicker);

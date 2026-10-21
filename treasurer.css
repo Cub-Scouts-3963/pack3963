@@ -24,6 +24,11 @@
 }
 
 .collapsible-form[hidden]{display:none!important}
+.portal-panel[hidden]{display:none!important}
+.summary-card .text-button{margin-top:9px;font-size:.85rem}
+.bank-balance-current strong,.bank-balance-current span{display:block}
+.bank-balance-current strong{margin-bottom:6px;color:var(--blue);font-size:1.8rem}
+#bank-form{max-width:720px}
 .account-picker-field{display:grid;gap:6px}
 .field-label{font-weight:700;color:#33475b}
 .account-picker{overflow:hidden;border:1px solid #aebac7;border-radius:7px;background:#fff}

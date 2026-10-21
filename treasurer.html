@@ -50,6 +50,7 @@ styles:
       <button class="portal-tab" type="button" data-tab="expenses">Expenses &amp; receipts</button>
       <button class="portal-tab" type="button" data-tab="orders">Orders</button>
       <button class="portal-tab" type="button" data-tab="communications">Family emails</button>
+      <button class="portal-tab write-control" type="button" data-tab="bank">Bank balance</button>
       <button class="portal-tab" type="button" data-tab="import">Import</button>
       <button class="portal-tab admin-only" type="button" data-tab="access">Access</button>
     </nav>
@@ -57,27 +58,31 @@ styles:
 
     <section class="portal-panel is-active" data-panel="dashboard">
       <div class="summary-grid">
-        <article class="summary-card"><span>Bank balance</span><strong id="summary-bank">—</strong><small id="summary-bank-date">No snapshot yet</small></article>
+        <article class="summary-card"><span>Bank balance</span><strong id="summary-bank">—</strong><small id="summary-bank-date">No snapshot yet</small><button class="text-button write-control" type="button" data-go-tab="bank">Manage balance</button></article>
         <article class="summary-card"><span>Balances due</span><strong id="summary-due">—</strong><small id="summary-due-count"></small></article>
         <article class="summary-card"><span>Account credits</span><strong id="summary-credits">—</strong><small id="summary-credit-count"></small></article>
         <article class="summary-card"><span>Pack expenses</span><strong id="summary-expenses">—</strong><small id="summary-reimbursements"></small></article>
       </div>
-      <div class="portal-grid portal-grid--two">
-        <article class="card">
-          <h3>Record bank balance</h3>
-          <form id="bank-form" class="portal-form">
-            <label>Balance<input name="balance" type="number" min="-999999" step="0.01" required></label>
-            <label>As of<input name="as_of_date" type="date" required></label>
-            <label>Notes<textarea name="notes" rows="2"></textarea></label>
-            <button class="btn-blue write-control" type="submit">Save balance snapshot</button>
-          </form>
-        </article>
-        <article class="card"><h3>Current priorities</h3><ul class="dashboard-list" id="priority-list"></ul></article>
-      </div>
+      <article class="card"><h3>Current priorities</h3><ul class="dashboard-list" id="priority-list"></ul></article>
       <article class="card">
         <div class="card-heading-row"><h3>Recent activity</h3><button class="text-button" type="button" data-go-tab="transactions">View all</button></div>
         <div class="table-wrap"><table><thead><tr><th>Date</th><th>Account</th><th>Type</th><th>Description</th><th class="money">Amount</th></tr></thead><tbody id="recent-activity"></tbody></table></div>
       </article>
+    </section>
+
+    <section class="portal-panel write-control" data-panel="bank" aria-labelledby="bank-heading">
+      <article class="card">
+        <div class="card-heading-row"><h3 id="bank-heading">Bank balance</h3><button class="btn-blue" id="show-bank-form" type="button">Update balance</button></div>
+        <p>Record the balance shown by the Pack's bank account or statement. This dated snapshot is separate from Scout and family balances; recording charges or payments does not automatically change it.</p>
+        <div class="bank-balance-current"><strong id="bank-current-balance">—</strong><span id="bank-current-date">No balance recorded yet</span></div>
+      </article>
+      <form id="bank-form" class="card portal-form collapsible-form" hidden>
+        <div class="card-heading-row"><h3>Update bank balance</h3><button class="text-button" type="button" data-close-form="bank-form">Cancel</button></div>
+        <label>Balance<input name="balance" type="number" min="-999999" step="0.01" required></label>
+        <label>As of<input name="as_of_date" type="date" required></label>
+        <label>Notes<textarea name="notes" rows="2"></textarea></label>
+        <button class="btn-blue" type="submit">Save balance snapshot</button>
+      </form>
     </section>
 
     <section class="portal-panel" data-panel="accounts">
