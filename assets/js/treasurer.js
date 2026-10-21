@@ -624,81 +624,6 @@
     await loadAll();
   }
 
-  function mapImport(text) {
-    const raw = parseCsv(text.replace(/^\uFEFF/, ""));
-    if (raw.length < 2) throw new Error("The CSV does not contain any transaction rows.");
-    const headers = raw[0].map(key);
-    const expanded = [];
-    raw.slice(1).forEach(r => {
-      if (r.length > headers.length) {
-        for (let i = 0; i < r.length; i += headers.length) expanded.push(r.slice(i, i + headers.length));
-      } else expanded.push(r);
-    });
-    const pick = (obj, names) => { for (const n of names) if (obj[key(n)] != null && String(obj[key(n)]).trim()) return String(obj[key(n)]).trim(); return ""; };
-    return expanded.map((r, index) => {
-      const obj = {}; headers.forEach((h, i) => { obj[h] = r[i] ?? ""; });
-      const first = pick(obj, ["first name","firstname","member first name"]);
-      const last = pick(obj, ["last name","lastname","member last name"]);
-      let name = pick(obj, ["scout name","member name","account name","account","name","participant","member","user name","username"]);
-      if (!name) name = [first, last].filter(Boolean).join(" ");
-      if (name.includes(",") && !first) { const p = name.split(","); name = `${p.slice(1).join(" ").trim()} ${p[0].trim()}`.trim(); }
-      const charge = numberValue(pick(obj, ["charge","charge amount","debit"]));
-      const payment = numberValue(pick(obj, ["payment","payment amount","credit","amount paid"]));
-      let type = charge ? "charge" : payment ? "payment" : key(pick(obj, ["transaction type","type"])).includes("charge") ? "charge" : "payment";
-      const amount = charge || payment || numberValue(pick(obj, ["amount","transaction amount"]));
-      const sourceId = pick(obj, ["payment log id","payment log entry id","paymentlogid","transaction id","entry id","id"]) || `row-${index + 2}-${key(name)}-${Math.round(amount * 100)}`;
-      const den = pick(obj, ["den","den name","group"]);
-      const description = pick(obj, ["description","item","reason","memo","charge description"]) || `Scoutbook ${type}`;
-      const bsa = pick(obj, ["bsa member id","member id","memberid","bsaid"]);
-      return { name, den, bsa, type, amount_cents: Math.round(amount * 100), date: dateValue(pick(obj, ["transaction date","date","posted date"])), description, sourceId, raw: obj };
-    }).filter(r => r.name && r.amount_cents > 0);
-  }
-
-  function previewImport(rows) {
-    state.importRows = rows;
-    const charges = rows.filter(r => r.type === "charge").reduce((n, r) => n + r.amount_cents, 0);
-    const payments = rows.filter(r => r.type !== "charge").reduce((n, r) => n + r.amount_cents, 0);
-    $("#import-summary").innerHTML = [
-      ["Rows ready", rows.length], ["Charges", money(charges)], ["Payments", money(payments)]
-    ].map(([label, value]) => `<article class="summary-card"><span>${esc(label)}</span><strong>${esc(value)}</strong></article>`).join("");
-    $("#import-table").innerHTML = rows.slice(0, 100).map(r => `<tr><td>${esc(r.name)}</td><td>${esc(r.den || "—")}</td><td>${esc(human(r.type))}</td><td>${esc(r.description)}</td><td class="money">${money(r.amount_cents)}</td></tr>`).join("");
-    $("#import-preview").hidden = false;
-    status(`Review ${rows.length} mapped rows before importing. The preview shows up to 100.`, "", "#import-status");
-  }
-
-  async function runImport() {
-    if (!state.importRows.length) return;
-    status("Importing accounts and transactions…", "", "#import-status");
-    const existingSource = new Set(state.entries.filter(e => e.source === "scoutbook_import").map(e => e.source_record_id));
-    const accountByName = new Map(state.accounts.map(a => [a.display_name.trim().toLowerCase(), a]));
-    const accountByBsa = new Map(state.accounts.filter(a => a.bsa_member_id).map(a => [a.bsa_member_id, a]));
-    const toInsert = []; let skipped = 0;
-    for (const r of state.importRows) {
-      if (existingSource.has(r.sourceId)) { skipped++; continue; }
-      let account = (r.bsa && accountByBsa.get(r.bsa)) || accountByName.get(r.name.trim().toLowerCase());
-      if (!account) {
-        const leaderLike = /leader|parent|family|guardian/i.test(r.name + " " + r.den);
-        const created = await client.from("financial_accounts").insert({
-          account_type: leaderLike ? "household" : "scout", display_name: r.name, den: r.den || null,
-          bsa_member_id: r.bsa || null, source: undefined
-        }).select().single();
-        if (created.error) throw created.error;
-        account = created.data; accountByName.set(r.name.trim().toLowerCase(), account);
-        if (r.bsa) accountByBsa.set(r.bsa, account);
-      }
-      toInsert.push({
-        account_id: account.id, entry_type: r.type, amount_cents: r.amount_cents, occurred_on: r.date,
-        description: r.description, category: "Scoutbook import", source: "scoutbook_import", source_record_id: r.sourceId,
-        notes: "Imported from Scoutbook Payment Log"
-      });
-    }
-    if (toInsert.length) {
-      const { error } = await client.from("ledger_entries").insert(toInsert); if (error) throw error;
-    }
-    status(`Import complete: ${toInsert.length} added, ${skipped} duplicate${skipped === 1 ? "" : "s"} skipped.`, "success", "#import-status");
-    state.importRows = []; $("#import-preview").hidden = true; $("#csv-file").value = "";
-    await loadAll();
-  }
 
   async function submitHandler(form, action, success) {
     status("Saving…");
@@ -707,6 +632,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", async () => {
+    window.addEventListener("treasury-imported", loadAll);
     setDefaults();
     $("#login-form").addEventListener("submit", async event => {
       event.preventDefault(); status("Sending secure link…", "", "#login-status");
@@ -785,11 +711,6 @@
       try { await runRosterImport(); }
       catch (error) { status(error.message || "Unable to update the roster.", "error", "#roster-status"); }
     });
-    $("#csv-file").addEventListener("change", async e => {
-      const file = e.target.files[0]; if (!file) return;
-      try { previewImport(mapImport(await file.text())); } catch (error) { status(error.message, "error", "#import-status"); }
-    });
-    $("#run-import").addEventListener("click", async () => { try { await runImport(); } catch (error) { status(error.message, "error", "#import-status"); } });
     const { data } = await client.auth.getSession();
     if (data.session) await authorize(data.session);
     client.auth.onAuthStateChange((event, session) => { if (event === "SIGNED_IN" && session && state.user?.id !== session.user.id) setTimeout(() => authorize(session), 0); });

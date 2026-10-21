@@ -33,4 +33,4 @@ jobs:
           node-version: "22"
 
       - name: Verify Treasury invitations
-        run: node --test scripts/treasury-invitations.test.mjs
+        run: node --test scripts/treasury-*.test.mjs

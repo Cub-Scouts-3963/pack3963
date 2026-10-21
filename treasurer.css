@@ -29,6 +29,10 @@
 .bank-balance-current strong,.bank-balance-current span{display:block}
 .bank-balance-current strong{margin-bottom:6px;color:var(--blue);font-size:1.8rem}
 #bank-form{max-width:720px}
+.treasurer-shell [hidden]{display:none!important}
+.transfer-review-wrap{max-height:560px;overflow:auto}
+.transfer-review-wrap th{position:sticky;top:0}
+.transfer-review-wrap input[type="checkbox"]{width:20px;height:20px}
 .account-picker-field{display:grid;gap:6px}
 .field-label{font-weight:700;color:#33475b}
 .account-picker{overflow:hidden;border:1px solid #aebac7;border-radius:7px;background:#fff}

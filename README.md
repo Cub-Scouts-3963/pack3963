@@ -96,6 +96,14 @@ The authentication/email Worker is a separate service. Deploy it using `workers/
 
 ## Before opening a pull request
 
+### Treasury spreadsheets
+
+Under **Import**, admins and treasurers can download Excel or CSV entry templates prefilled with current Scout/family accounts and existing charge purposes. Payment and credit templates retain existing charge/order links; new-charge templates add account ledger entries. Create quantity/size orders under **Orders** first. Leave unused amounts blank, keep names and hidden IDs unchanged, and upload the completed template to review rows and totals before posting.
+
+Repeated uploads skip previously imported Record IDs. Changed values for an imported ID are rejected; possible duplicate transactions start unselected. Invalid rows block the batch. Use a fresh template for additional transactions. Financial templates never create accounts or replace balances. Roster imports remain separate.
+
+Exports provide current account balances, full transaction history (including removed entries), Pack expenses, and order/payment status in Excel or CSV. Reports cannot be imported as new entries. Excel support loads on demand; CSV remains available if the external Excel library cannot load. Templates and reports contain private financial information and must remain within authorized Pack leadership.
+
 - Run `bundle exec jekyll build` and confirm it completes without errors.
 - Open the changed pages on both desktop and mobile widths.
 - Test internal links, downloads, navigation, forms, and the photo lightbox.
@@ -109,4 +117,3 @@ The authentication/email Worker is a separate service. Deploy it using `workers/
 - Store downloadable documents in `assets/docs/`.
 - Store only web-ready gallery images in the site repository. Keep original full-resolution photos in the Pack's private storage.
 - Never commit passwords, access tokens, private member data, or confidential documents.
-

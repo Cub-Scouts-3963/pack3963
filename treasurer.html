@@ -258,18 +258,37 @@ styles:
         <p class="form-status" id="roster-status" role="status"></p>
       </article>
 
-      <article class="card">
-        <p class="page-kicker">Scoutbook financial history</p>
-        <h3>Import a Payment Log CSV</h3>
-        <p>The file is processed in your browser and sent only to the private Pack database. Existing source IDs are skipped, so the same report can be safely checked again.</p>
-        <label class="file-drop">Choose Scoutbook Payment Log CSV<input id="csv-file" type="file" accept=".csv,text/csv"></label>
-        <div id="import-preview" hidden>
-          <div class="summary-grid summary-grid--compact" id="import-summary"></div>
-          <div class="table-wrap"><table><thead><tr><th>Account</th><th>Den</th><th>Type</th><th>Description</th><th class="money">Amount</th></tr></thead><tbody id="import-table"></tbody></table></div>
-          <button class="btn-blue write-control" id="run-import" type="button">Import reviewed rows</button>
+      <article class="card write-control">
+        <p class="page-kicker">Spreadsheet templates</p>
+        <h3>Download a prefilled entry template</h3>
+        <p>Choose what the entries are for. Scout and family names, account IDs, and existing charge names come from the portal. Amounts start blank so downloading a template does not repeat existing charges.</p>
+        <div class="form-grid portal-form">
+          <label>Charge purpose<select id="template-purpose" aria-label="Template charge purpose"></select></label>
+          <label>Entry type<select id="template-type"><option value="payment">Payment against existing charges</option><option value="credit">Credit against existing charges</option><option value="charge">New charge</option></select></label>
+          <label>Accounts<select id="template-account-type"><option value="all">Scouts and families</option><option value="scout">Scouts only</option><option value="household">Families only</option></select></label>
+          <label>File format<select id="transfer-format"><option value="xlsx">Excel workbook (.xlsx)</option><option value="csv">CSV for Excel (.csv)</option></select></label>
         </div>
-        <p class="form-status" id="import-status" role="status"></p>
+        <p><button class="btn-blue" id="download-entry-template" type="button">Download entry template</button></p>
+        <p>Fill the amount, date, payment method, reference, and notes as needed. Leave unused amounts blank. For another transaction, download a fresh template. Create new orders with quantities and sizes under Orders.</p>
+        <label class="file-drop">Upload the completed Pack template<input id="template-file" type="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"></label>
+        <div id="transfer-review" hidden>
+          <h3>Review before posting</h3>
+          <p id="transfer-totals" role="status"></p>
+          <div class="table-wrap transfer-review-wrap"><table><thead><tr><th>Include</th><th>Row</th><th>Scout / account</th><th>Charge purpose</th><th>Type</th><th>Date</th><th class="money">Amount</th><th>Review</th></tr></thead><tbody id="transfer-review-table"></tbody></table></div>
+          <p>Possible duplicates start excluded. Fix invalid rows in the file and upload it again before posting. Imports add transactions; they do not replace existing records or balances.</p>
+          <button class="btn-blue" id="post-template" type="button" disabled>Post selected transactions</button>
+        </div>
       </article>
+      <article class="card">
+        <h3>Export reports</h3>
+        <p>Download current records for Kevin or other authorized leaders. Reports cannot be imported as new transactions. Individual account ledgers also have CSV and print/PDF options.</p>
+        <div class="form-grid portal-form">
+          <label>Report<select id="export-kind"><option value="transactions">Transaction history</option><option value="accounts">Scout and family balances</option><option value="expenses">Pack expenses</option><option value="orders">Orders and payment status</option></select></label>
+          <label>File format<select id="export-format"><option value="xlsx">Excel workbook (.xlsx)</option><option value="csv">CSV for Excel (.csv)</option></select></label>
+        </div>
+        <p><button class="btn-secondary" id="export-report" type="button">Export report</button></p>
+      </article>
+      <p class="form-status" id="transfer-status" role="status"></p>
     </section>
 
     <section class="portal-panel admin-only" data-panel="access">
@@ -292,3 +311,4 @@ styles:
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js"></script>
 <script src="{{ '/assets/js/treasurer.js' | relative_url }}?v={{ site.asset_version }}"></script>
 <script src="{{ '/assets/js/treasurer-orders.js' | relative_url }}?v={{ site.asset_version }}"></script>
+<script type="module" src="{{ '/assets/js/treasurer-transfers.mjs' | relative_url }}?v={{ site.asset_version }}"></script>

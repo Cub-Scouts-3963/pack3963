@@ -108,6 +108,7 @@
   }
   function reveal(id){const e=$(id);e.hidden=false;e.scrollIntoView({behavior:"smooth",block:"start"})}
   document.addEventListener("DOMContentLoaded",async()=>{
+    window.addEventListener("treasury-imported",()=>load().catch(x=>setStatus(x.message,"error")));
     $("#show-campaign-form")?.addEventListener("click",()=>reveal("#campaign-form"));
     $("#show-order-form")?.addEventListener("click",()=>reveal("#order-form"));
     $$("[data-close-order-form]").forEach(b=>b.addEventListener("click",()=>$("#"+b.dataset.closeOrderForm).hidden=true));
