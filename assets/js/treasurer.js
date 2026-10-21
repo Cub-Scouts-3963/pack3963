@@ -6,7 +6,7 @@
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: { persistSession: true, detectSessionInUrl: true, autoRefreshToken: true }
   });
-  const state = { user: null, access: null, accounts: [], entries: [], expenses: [], receipts: [], summary: null, users: [], importRows: [] };
+  const state = { user: null, access: null, accounts: [], entries: [], expenses: [], receipts: [], summary: null, users: [], householdContacts: [], importRows: [], rosterRows: [], rosterHouseholds: [], rosterFileName: "" };
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => Array.from(document.querySelectorAll(selector));
   const today = () => new Date().toISOString().slice(0, 10);
@@ -68,7 +68,8 @@
         client.from("ledger_entries").select("*").order("occurred_on", { ascending: false }).order("created_at", { ascending: false }).limit(2000),
         client.from("expenses").select("*").order("purchased_on", { ascending: false }).order("created_at", { ascending: false }).limit(1000),
         client.from("expense_receipts").select("*"),
-        client.from("treasurer_summary").select("*").maybeSingle()
+        client.from("treasurer_summary").select("*").maybeSingle(),
+        client.from("household_contacts").select("*").eq("active", true).order("is_primary", { ascending: false }).order("full_name")
       ];
       if (state.access?.role === "admin") requests.push(client.from("authorized_users").select("*").order("email"));
       const results = await Promise.all(requests);
@@ -77,7 +78,8 @@
       state.expenses = checked(results[2].data, results[2].error) || [];
       state.receipts = checked(results[3].data, results[3].error) || [];
       state.summary = checked(results[4].data, results[4].error) || {};
-      state.users = results[5] ? checked(results[5].data, results[5].error) || [] : [];
+      state.householdContacts = checked(results[5].data, results[5].error) || [];
+      state.users = results[6] ? checked(results[6].data, results[6].error) || [] : [];
       renderAll();
       status(`Updated ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.`, "success");
     } catch (error) {
@@ -123,19 +125,25 @@
     return state.accounts.filter(a => {
       const hay = [a.display_name, a.den, a.household_name, a.bsa_member_id, a.scoutbook_user_id].join(" ").toLowerCase();
       const b = Number(a.balance_cents);
-      const match = filter === "due" ? b > 0 : filter === "credit" ? b < 0 : filter === "paid" ? b === 0 && a.active : filter === "inactive" ? !a.active : true;
+      const match = filter === "current" ? a.active : filter === "due" ? b > 0 && a.active : filter === "credit" ? b < 0 && a.active : filter === "paid" ? b === 0 && a.active : filter === "inactive" ? !a.active : true;
       return (!q || hay.includes(q)) && match;
     });
   }
 
   function renderAccounts() {
+    const canWrite = ["admin", "treasurer"].includes(state.access?.role);
     const rows = filteredAccounts();
     $("#accounts-table").innerHTML = rows.length ? rows.map(a => {
       const b = Number(a.balance_cents);
       const cls = b > 0 ? "balance-due" : b < 0 ? "balance-credit" : "";
       const label = b > 0 ? "Due" : b < 0 ? "Credit" : "Paid / even";
-      return `<tr><td><strong>${esc(a.display_name)}</strong>${a.household_name ? `<br><small>${esc(a.household_name)}</small>` : ""}</td><td>${esc(a.den || "—")}</td><td>${esc(human(a.account_type))}</td><td class="money ${cls}">${money(Math.abs(b))}</td><td><span class="status-pill">${esc(a.active ? label : "Inactive")}</span></td></tr>`;
-    }).join("") : emptyRow(5, "No matching accounts.");
+      const family = a.account_type === "scout" ? state.accounts.find(x => x.id === a.parent_account_id) : a;
+      const contacts = family ? state.householdContacts.filter(c => c.household_account_id === family.id) : [];
+      const contactText = contacts.length ? contacts.map(c => c.full_name).join(", ") : "—";
+      const familyLine = a.account_type === "scout" && family ? `<br><small>${esc(family.display_name)}</small>` : (a.household_name ? `<br><small>${esc(a.household_name)}</small>` : "");
+      const action = canWrite ? `<button class="action-button" data-account-active="${a.active ? "false" : "true"}" data-account-id="${a.id}" type="button">${a.active ? "Remove" : "Restore"}</button>` : "";
+      return `<tr class="${a.active ? "" : "is-voided"}"><td><strong>${esc(a.display_name)}</strong>${familyLine}</td><td><small>${esc(contactText)}</small></td><td>${esc(a.den || "—")}</td><td>${esc(human(a.account_type))}</td><td class="money ${cls}">${money(Math.abs(b))}</td><td><span class="status-pill">${esc(a.active ? label : "Inactive")}</span></td><td class="write-control">${action}</td></tr>`;
+    }).join("") : emptyRow(7, "No matching accounts.");
   }
 
   function filteredEntries() {
@@ -187,7 +195,7 @@
   }
 
   function populateAccounts() {
-    $("#entry-accounts").innerHTML = state.accounts.filter(a => a.active).map(a => `<option value="${a.id}">${esc(a.display_name)}${a.den ? " — " + esc(a.den) : ""}</option>`).join("");
+    $("#entry-accounts").innerHTML = state.accounts.filter(a => a.active).map(a => `<option value="${a.id}">[${a.account_type === "household" ? "Family" : a.account_type === "scout" ? "Scout" : "Parent"}] ${esc(a.display_name)}${a.den ? " — " + esc(a.den) : ""}</option>`).join("");
   }
 
   function openTab(name) {
@@ -199,6 +207,18 @@
     const f = new FormData(form);
     const row = Object.fromEntries(["account_type","display_name","den","household_name","bsa_member_id","scoutbook_user_id","contact_email","notes"].map(k => [k, String(f.get(k) || "").trim() || null]));
     const { error } = await client.from("financial_accounts").insert(row); if (error) throw error;
+  }
+
+  async function setAccountActive(id, active) {
+    const account = state.accounts.find(a => a.id === id);
+    if (!account) throw new Error("Account not found.");
+    const message = active
+      ? `Restore ${account.display_name} to the current account list?`
+      : `Remove ${account.display_name} from the current list? Financial history will be preserved and the account can be restored.`;
+    if (!window.confirm(message)) return;
+    const { error } = await client.from("financial_accounts").update({ active }).eq("id", id);
+    if (error) throw error;
+    await loadAll();
   }
 
   async function saveEntry(form) {
@@ -280,6 +300,192 @@
     const y = m[3].length === 2 ? "20" + m[3] : m[3];
     return `${y}-${m[1].padStart(2,"0")}-${m[2].padStart(2,"0")}`;
   };
+
+
+  const rosterSlug = value => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const rosterNameKey = value => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  function familyNameFor(guardian, youthLastNames) {
+    const guardianLast = String(guardian || "").trim().split(/\s+/).pop() || "Household";
+    const lasts = [...new Set(youthLastNames.filter(Boolean))];
+    if (!lasts.length) return guardianLast + " family";
+    if (lasts.every(last => rosterNameKey(last) === rosterNameKey(guardianLast))) return guardianLast + " family";
+    if (lasts.length === 1 && rosterNameKey(lasts[0]).includes(rosterNameKey(guardianLast))) return lasts[0].replaceAll("-", "–") + " family";
+    if (lasts.length === 1) return lasts[0] + "–" + guardianLast + " family";
+    return lasts.join("–") + "–" + guardianLast + " family";
+  }
+
+  function mapRoster(text) {
+    const rows = parseCsv(text.replace(/^\uFEFF/, ""));
+    let section = "";
+    const adults = new Map();
+    const youth = [];
+
+    rows.forEach(row => {
+      const cells = row.map(v => String(v || "").trim());
+      const joined = cells.join(" ");
+      if (/ADULT MEMBERS/i.test(joined)) { section = "adult"; return; }
+      if (/YOUTH MEMBERS/i.test(joined)) { section = "youth"; return; }
+      if (/First Name/i.test(joined) && /Last Name/i.test(joined)) return;
+      const start = /^\d+$/.test(cells[0]) ? 1 : 0;
+      const first = cells[start], last = cells[start + 1];
+      if (!section || !first || !last) return;
+
+      if (section === "adult") {
+        const name = (first + " " + last).trim();
+        const matches = [...joined.matchAll(/\b(Lion|Tiger|Wolf|Bear|Webelos|Arrow of Light)\b/gi)].map(m => human(m[1].toLowerCase()));
+        const current = adults.get(rosterNameKey(name)) || { name, dens: new Set() };
+        matches.forEach(den => current.dens.add(den));
+        adults.set(rosterNameKey(name), current);
+        return;
+      }
+
+      const relationshipIndex = cells.findIndex(v => /Pathway to Adventure|Father of|Mother of|Guardian/i.test(v));
+      if (relationshipIndex < 0) return;
+      const relationshipText = cells[relationshipIndex];
+      const guardianId = relationshipText.match(/\((\d+)\)/)?.[1] || "";
+      const candidates = cells.slice(start + 2, relationshipIndex).filter(v =>
+        v && !/Pack\s*3963/i.test(v) && !/^(Junior|Senior|Jr\.?|Sr\.?)$/i.test(v)
+      );
+      const guardian = candidates[candidates.length - 1] || "";
+      if (!guardian) return;
+      const suffix = cells.slice(start + 2, relationshipIndex).find(v => /^(Junior|Senior|Jr\.?|Sr\.?)$/i.test(v)) || "";
+      const displaySuffix = /^junior$/i.test(suffix) ? " Jr." : /^senior$/i.test(suffix) ? " Sr." : suffix ? " " + suffix : "";
+      const adult = adults.get(rosterNameKey(guardian));
+      const dens = adult ? [...adult.dens] : [];
+      youth.push({
+        guardian_id: guardianId || "name-" + rosterSlug(guardian),
+        guardian,
+        guardian_relationship: /Mother/i.test(relationshipText) ? "Mother / guardian" : /Father/i.test(relationshipText) ? "Father / guardian" : "Parent / guardian",
+        first_name: first,
+        last_name: last,
+        display_name: first + " " + last + displaySuffix,
+        den: dens.length === 1 ? dens[0] : null,
+        suffix
+      });
+    });
+
+    if (!youth.length) throw new Error("No youth members were found. Choose the Scoutbook Roster Report CSV.");
+    const groups = new Map();
+    youth.forEach(scout => {
+      const group = groups.get(scout.guardian_id) || { guardian_id: scout.guardian_id, guardian: scout.guardian, guardian_relationship: scout.guardian_relationship, scouts: [] };
+      group.scouts.push(scout);
+      groups.set(scout.guardian_id, group);
+    });
+    const households = [...groups.values()].map(group => ({
+      ...group,
+      family_name: familyNameFor(group.guardian, group.scouts.map(s => s.last_name)),
+      den: [...new Set(group.scouts.map(s => s.den).filter(Boolean))].join(" / ") || null
+    }));
+    const familyByGuardian = new Map(households.map(h => [h.guardian_id, h]));
+    youth.forEach(scout => { scout.family_name = familyByGuardian.get(scout.guardian_id).family_name; });
+    return { scouts: youth, households };
+  }
+
+  function previewRoster(mapped, fileName) {
+    state.rosterRows = mapped.scouts;
+    state.rosterHouseholds = mapped.households;
+    state.rosterFileName = fileName;
+    const uncertain = mapped.scouts.filter(s => !s.den).length;
+    $("#roster-summary").innerHTML = [
+      ["Scouts", mapped.scouts.length], ["Families", mapped.households.length], ["Dens to confirm", uncertain]
+    ].map(([label, value]) => `<article class="summary-card"><span>${esc(label)}</span><strong>${esc(value)}</strong></article>`).join("");
+    $("#roster-table").innerHTML = mapped.scouts.map(s => `<tr><td>${esc(s.display_name)}</td><td>${esc(s.family_name)}</td><td>${esc(s.guardian)}</td><td>${esc(s.den || "Needs confirmation")}</td></tr>`).join("");
+    $("#roster-preview").hidden = false;
+    status(`Review ${mapped.scouts.length} Scouts and ${mapped.households.length} families before updating the roster.`, "", "#roster-status");
+  }
+
+  async function runRosterImport() {
+    if (!state.rosterRows.length) return;
+    status("Updating Scouts and family accounts…", "", "#roster-status");
+    const rosterDate = today();
+    const importResult = await client.from("roster_imports").insert({
+      source_filename: state.rosterFileName || "Scoutbook Roster Report.csv",
+      roster_date: rosterDate,
+      scout_count: state.rosterRows.length,
+      household_count: state.rosterHouseholds.length,
+      notes: "Imported through the Pack 3963 Treasurer Portal"
+    }).select().single();
+    if (importResult.error) throw importResult.error;
+    const importId = importResult.data.id;
+
+    const householdRows = state.rosterHouseholds.map(h => ({
+      account_type: "household",
+      display_name: h.family_name,
+      household_name: h.family_name,
+      den: h.den,
+      bsa_member_id: /^\d+$/.test(h.guardian_id) ? h.guardian_id : null,
+      active: true,
+      notes: "Primary guardian: " + h.guardian,
+      roster_key: "household:" + h.guardian_id,
+      roster_managed: true,
+      last_seen_roster_on: rosterDate,
+      last_roster_import_id: importId
+    }));
+    let result = await client.from("financial_accounts").upsert(householdRows, { onConflict: "roster_key" });
+    if (result.error) throw result.error;
+
+    const householdKeys = householdRows.map(h => h.roster_key);
+    result = await client.from("financial_accounts").select("id,roster_key,household_name").in("roster_key", householdKeys);
+    if (result.error) throw result.error;
+    const householdByKey = new Map(result.data.map(h => [h.roster_key, h]));
+    const importedKeys = new Set(householdKeys);
+
+    const scoutRows = state.rosterRows.map(s => {
+      const parent = householdByKey.get("household:" + s.guardian_id);
+      const rosterKey = "scout:" + s.guardian_id + ":" + rosterSlug(s.display_name);
+      importedKeys.add(rosterKey);
+      return {
+        account_type: "scout",
+        display_name: s.display_name,
+        scout_first_name: s.first_name,
+        scout_last_name: s.last_name,
+        household_name: s.family_name,
+        den: s.den,
+        active: true,
+        notes: "Guardian: " + s.guardian + (s.den ? "" : "; den requires confirmation"),
+        parent_account_id: parent.id,
+        roster_key: rosterKey,
+        roster_managed: true,
+        last_seen_roster_on: rosterDate,
+        last_roster_import_id: importId
+      };
+    });
+    result = await client.from("financial_accounts").upsert(scoutRows, { onConflict: "roster_key" });
+    if (result.error) throw result.error;
+
+    const existingContactKeys = new Set(state.householdContacts.map(c => c.household_account_id + "|" + rosterNameKey(c.full_name)));
+    const newContacts = state.rosterHouseholds.map(h => {
+      const parent = householdByKey.get("household:" + h.guardian_id);
+      return {
+        household_account_id: parent.id,
+        full_name: h.guardian,
+        relationship: h.guardian_relationship,
+        is_primary: true,
+        source: "roster",
+        active: true
+      };
+    }).filter(c => !existingContactKeys.has(c.household_account_id + "|" + rosterNameKey(c.full_name)));
+    if (newContacts.length) {
+      result = await client.from("household_contacts").insert(newContacts);
+      if (result.error) throw result.error;
+    }
+
+    let archived = 0;
+    if ($("#archive-missing-roster").checked) {
+      const missingIds = state.accounts.filter(a => a.roster_managed && a.active && !importedKeys.has(a.roster_key)).map(a => a.id);
+      if (missingIds.length) {
+        result = await client.from("financial_accounts").update({ active: false }).in("id", missingIds);
+        if (result.error) throw result.error;
+        archived = missingIds.length;
+      }
+    }
+
+    status(`Roster updated: ${scoutRows.length} Scouts, ${householdRows.length} families, ${archived} older account${archived === 1 ? "" : "s"} marked inactive.`, "success", "#roster-status");
+    state.rosterRows = []; state.rosterHouseholds = []; state.rosterFileName = "";
+    $("#roster-preview").hidden = true; $("#roster-file").value = "";
+    await loadAll();
+  }
 
   function mapImport(text) {
     const raw = parseCsv(text.replace(/^\uFEFF/, ""));
@@ -389,6 +595,11 @@
     $("#access-form").addEventListener("submit", e => { e.preventDefault(); submitHandler(e.currentTarget, async form => {
       const f = new FormData(form); const { error } = await client.from("authorized_users").upsert({ email: String(f.get("email")).trim().toLowerCase(), display_name: String(f.get("display_name") || "").trim() || null, role: f.get("role"), active: true }, { onConflict: "email" }); if (error) throw error;
     }, "Access updated."); });
+    $("#accounts-table").addEventListener("click", async e => {
+      const b = e.target.closest("button[data-account-id]"); if (!b) return;
+      try { await setAccountActive(b.dataset.accountId, b.dataset.accountActive === "true"); }
+      catch (error) { status(error.message || "Unable to update the account.", "error"); }
+    });
     $("#transactions-table").addEventListener("click", async e => {
       const b = e.target.closest("button"); if (!b) return;
       try { if (b.dataset.voidEntry) await voidRecord("ledger_entries", b.dataset.voidEntry); if (b.dataset.restoreEntry) await voidRecord("ledger_entries", b.dataset.restoreEntry, true); } catch (error) { status(error.message, "error"); }
@@ -400,6 +611,15 @@
         if (b.dataset.restoreExpense) await voidRecord("expenses", b.dataset.restoreExpense, true);
         if (b.dataset.openReceipt) { const { data, error } = await client.storage.from("pack-receipts").createSignedUrl(b.dataset.openReceipt, 60); if (error) throw error; window.open(data.signedUrl, "_blank", "noopener"); }
       } catch (error) { status(error.message, "error"); }
+    });
+    $("#roster-file").addEventListener("change", async e => {
+      const file = e.target.files[0]; if (!file) return;
+      try { previewRoster(mapRoster(await file.text()), file.name); }
+      catch (error) { status(error.message, "error", "#roster-status"); }
+    });
+    $("#run-roster-import").addEventListener("click", async () => {
+      try { await runRosterImport(); }
+      catch (error) { status(error.message || "Unable to update the roster.", "error", "#roster-status"); }
     });
     $("#csv-file").addEventListener("change", async e => {
       const file = e.target.files[0]; if (!file) return;
