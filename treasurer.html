@@ -1,0 +1,185 @@
+---
+layout: default
+title: Pack 3963 Treasurer Portal
+description: Private financial tracker for authorized Pack 3963 leaders.
+robots: noindex, nofollow
+styles:
+- /treasurer.css
+---
+
+<header class="page-header treasurer-page-header">
+  <h1>Pack 3963 Treasurer Portal</h1>
+  <p>Private account balances, payments, expenses, reimbursements, and receipts.</p>
+</header>
+
+<main class="treasurer-shell" id="treasurer-portal">
+  <section class="treasurer-auth card" id="auth-panel">
+    <p class="page-kicker">Authorized leaders only</p>
+    <h2>Sign in by email</h2>
+    <p>Enter an approved Pack email address. Supabase will email a secure sign-in link—there is no password to remember.</p>
+    <form id="login-form" class="compact-form">
+      <label for="login-email">Email address</label>
+      <div class="inline-form">
+        <input id="login-email" name="email" type="email" autocomplete="email" required>
+        <button class="btn-blue" type="submit">Email me a sign-in link</button>
+      </div>
+    </form>
+    <p class="form-status" id="login-status" role="status"></p>
+  </section>
+
+  <section id="access-panel" class="card" hidden>
+    <h2>Access has not been approved</h2>
+    <p>You signed in successfully, but this email is not on the Pack treasurer access list. Ask a Pack administrator to add it.</p>
+    <button class="btn-secondary" id="denied-sign-out" type="button">Sign out</button>
+  </section>
+
+  <div id="treasurer-app" hidden>
+    <div class="portal-toolbar">
+      <div><p class="page-kicker">Private workspace</p><h2 id="welcome-heading">Treasurer dashboard</h2></div>
+      <div class="toolbar-actions">
+        <span class="role-badge" id="user-role"></span>
+        <button class="btn-secondary" id="refresh-data" type="button">Refresh</button>
+        <button class="btn-secondary" id="sign-out" type="button">Sign out</button>
+      </div>
+    </div>
+
+    <nav class="portal-tabs" aria-label="Treasurer sections">
+      <button class="portal-tab is-active" type="button" data-tab="dashboard">Dashboard</button>
+      <button class="portal-tab" type="button" data-tab="accounts">Scouts &amp; accounts</button>
+      <button class="portal-tab" type="button" data-tab="transactions">Charges &amp; payments</button>
+      <button class="portal-tab" type="button" data-tab="expenses">Expenses &amp; receipts</button>
+      <button class="portal-tab" type="button" data-tab="import">Import</button>
+      <button class="portal-tab admin-only" type="button" data-tab="access">Access</button>
+    </nav>
+    <p id="app-status" class="form-status" role="status"></p>
+
+    <section class="portal-panel is-active" data-panel="dashboard">
+      <div class="summary-grid">
+        <article class="summary-card"><span>Bank balance</span><strong id="summary-bank">—</strong><small id="summary-bank-date">No snapshot yet</small></article>
+        <article class="summary-card"><span>Balances due</span><strong id="summary-due">—</strong><small id="summary-due-count"></small></article>
+        <article class="summary-card"><span>Account credits</span><strong id="summary-credits">—</strong><small id="summary-credit-count"></small></article>
+        <article class="summary-card"><span>Pack expenses</span><strong id="summary-expenses">—</strong><small id="summary-reimbursements"></small></article>
+      </div>
+      <div class="portal-grid portal-grid--two">
+        <article class="card">
+          <h3>Record bank balance</h3>
+          <form id="bank-form" class="portal-form">
+            <label>Balance<input name="balance" type="number" min="-999999" step="0.01" required></label>
+            <label>As of<input name="as_of_date" type="date" required></label>
+            <label>Notes<textarea name="notes" rows="2"></textarea></label>
+            <button class="btn-blue write-control" type="submit">Save balance snapshot</button>
+          </form>
+        </article>
+        <article class="card"><h3>Current priorities</h3><ul class="dashboard-list" id="priority-list"></ul></article>
+      </div>
+      <article class="card">
+        <div class="card-heading-row"><h3>Recent activity</h3><button class="text-button" type="button" data-go-tab="transactions">View all</button></div>
+        <div class="table-wrap"><table><thead><tr><th>Date</th><th>Account</th><th>Type</th><th>Description</th><th class="money">Amount</th></tr></thead><tbody id="recent-activity"></tbody></table></div>
+      </article>
+    </section>
+
+    <section class="portal-panel" data-panel="accounts">
+      <div class="filter-bar">
+        <input id="account-search" type="search" placeholder="Search Scout, family, den, or ID">
+        <select id="balance-filter"><option value="all">All accounts</option><option value="due">Has a balance</option><option value="credit">Has a credit</option><option value="paid">Paid / zero balance</option><option value="inactive">Inactive</option></select>
+        <button class="btn-blue write-control" type="button" id="show-account-form">Add Scout or account</button>
+      </div>
+      <form id="account-form" class="card portal-form collapsible-form" hidden>
+        <div class="card-heading-row"><h3>Add Scout or family account</h3><button type="button" class="text-button" data-close-form="account-form">Close</button></div>
+        <div class="form-grid">
+          <label>Account type<select name="account_type" required><option value="scout">Scout</option><option value="household">Household</option><option value="parent">Parent</option></select></label>
+          <label>Display name<input name="display_name" required placeholder="Jordan Smith"></label>
+          <label>Den<input name="den" placeholder="Webelos"></label>
+          <label>Household<input name="household_name" placeholder="Smith family"></label>
+          <label>BSA member ID<input name="bsa_member_id"></label>
+          <label>Scoutbook user ID<input name="scoutbook_user_id"></label>
+          <label>Contact email<input name="contact_email" type="email"></label>
+        </div>
+        <label>Notes<textarea name="notes" rows="2"></textarea></label>
+        <button class="btn-blue" type="submit">Add account</button>
+      </form>
+      <div class="table-wrap card"><table><thead><tr><th>Scout / account</th><th>Den</th><th>Type</th><th class="money">Balance</th><th>Status</th></tr></thead><tbody id="accounts-table"></tbody></table></div>
+    </section>
+
+    <section class="portal-panel" data-panel="transactions">
+      <div class="filter-bar">
+        <input id="transaction-search" type="search" placeholder="Search account, description, category, or method">
+        <select id="transaction-filter"><option value="active">Active entries</option><option value="charge">Charges</option><option value="payment">Payments</option><option value="credit">Credits</option><option value="voided">Removed / voided</option><option value="all">Everything</option></select>
+        <button class="btn-blue write-control" type="button" id="show-entry-form">Add charge or payment</button>
+      </div>
+      <form id="entry-form" class="card portal-form collapsible-form" hidden>
+        <div class="card-heading-row"><h3>Add an individual or bulk entry</h3><button type="button" class="text-button" data-close-form="entry-form">Close</button></div>
+        <div class="form-grid">
+          <label>Type<select name="entry_type" required><option value="charge">Charge</option><option value="payment">Payment</option><option value="credit">Credit</option></select></label>
+          <label>Amount<input name="amount" type="number" min="0.01" step="0.01" required></label>
+          <label>Date<input name="occurred_on" type="date" required></label>
+          <label>Category<input name="category" placeholder="Dues, camping, T-shirt"></label>
+          <label>Payment method<select name="payment_method"><option value="">Not applicable</option><option value="cash">Cash</option><option value="zelle">Zelle</option><option value="venmo">Venmo</option><option value="check">Check</option><option value="card">Card</option><option value="bank_transfer">Bank transfer</option><option value="other">Other</option></select></label>
+          <label>Reference<input name="reference" placeholder="Check number or transfer note"></label>
+        </div>
+        <label>Description<input name="description" required placeholder="2026–27 Pack dues"></label>
+        <label>Apply to one or more accounts<select id="entry-accounts" name="account_ids" multiple size="8" required></select><small>Use Ctrl/Command or Shift to select several Scouts.</small></label>
+        <label>Notes<textarea name="notes" rows="2"></textarea></label>
+        <button class="btn-blue" type="submit">Save entry to selected accounts</button>
+      </form>
+      <div class="table-wrap card"><table><thead><tr><th>Date</th><th>Account</th><th>Type</th><th>Description</th><th>Method</th><th class="money">Amount</th><th class="write-control">Action</th></tr></thead><tbody id="transactions-table"></tbody></table></div>
+    </section>
+
+    <section class="portal-panel" data-panel="expenses">
+      <div class="filter-bar">
+        <input id="expense-search" type="search" placeholder="Search vendor, category, purchaser, or notes">
+        <select id="expense-filter"><option value="active">Active expenses</option><option value="reimbursement">Reimbursements</option><option value="unpaid">Awaiting reimbursement</option><option value="missing">Missing receipt</option><option value="voided">Removed / voided</option><option value="all">Everything</option></select>
+        <button class="btn-blue write-control" type="button" id="show-expense-form">Add expense</button>
+      </div>
+      <form id="expense-form" class="card portal-form collapsible-form" hidden>
+        <div class="card-heading-row"><h3>Record Pack expense</h3><button type="button" class="text-button" data-close-form="expense-form">Close</button></div>
+        <div class="form-grid">
+          <label>Expense type<select name="expense_type" required><option value="pack_card">Pack card</option><option value="reimbursement">Reimburse someone</option></select></label>
+          <label>Amount<input name="amount" type="number" min="0.01" step="0.01" required></label>
+          <label>Purchase date<input name="purchased_on" type="date" required></label>
+          <label>Vendor<input name="vendor" required></label>
+          <label>Category<input name="category" placeholder="Scout Store, camping, supplies"></label>
+          <label>Purchased by<input name="purchased_by"></label>
+          <label>Reimburse to<input name="reimburse_to"></label>
+          <label>Status<select name="status"><option value="recorded">Recorded</option><option value="submitted">Submitted</option><option value="approved">Approved</option><option value="paid">Paid</option></select></label>
+          <label>Receipt (PDF or image, 10 MB max)<input name="receipt" type="file" accept="image/jpeg,image/png,image/webp,application/pdf"></label>
+        </div>
+        <label>Description<input name="description"></label>
+        <label>Notes<textarea name="notes" rows="2"></textarea></label>
+        <button class="btn-blue" type="submit">Save expense</button>
+      </form>
+      <div class="table-wrap card"><table><thead><tr><th>Date</th><th>Vendor</th><th>Type / status</th><th>Paid by</th><th>Receipt</th><th class="money">Amount</th><th class="write-control">Action</th></tr></thead><tbody id="expenses-table"></tbody></table></div>
+    </section>
+
+    <section class="portal-panel" data-panel="import">
+      <article class="card">
+        <p class="page-kicker">Scoutbook starting point</p>
+        <h3>Import a Payment Log CSV</h3>
+        <p>The file is processed in your browser and sent only to the private Pack database. Existing source IDs are skipped, so the same report can be safely checked again.</p>
+        <label class="file-drop">Choose Scoutbook Payment Log CSV<input id="csv-file" type="file" accept=".csv,text/csv"></label>
+        <div id="import-preview" hidden>
+          <div class="summary-grid summary-grid--compact" id="import-summary"></div>
+          <div class="table-wrap"><table><thead><tr><th>Account</th><th>Den</th><th>Type</th><th>Description</th><th class="money">Amount</th></tr></thead><tbody id="import-table"></tbody></table></div>
+          <button class="btn-blue write-control" id="run-import" type="button">Import reviewed rows</button>
+        </div>
+        <p class="form-status" id="import-status" role="status"></p>
+      </article>
+    </section>
+
+    <section class="portal-panel admin-only" data-panel="access">
+      <article class="card">
+        <h3>Authorized users</h3>
+        <form id="access-form" class="inline-form portal-form">
+          <label>Email<input name="email" type="email" required></label>
+          <label>Name<input name="display_name"></label>
+          <label>Role<select name="role"><option value="treasurer">Treasurer</option><option value="viewer">View only</option><option value="admin">Administrator</option></select></label>
+          <button class="btn-blue" type="submit">Add or update</button>
+        </form>
+        <div class="table-wrap"><table><thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th></tr></thead><tbody id="access-table"></tbody></table></div>
+      </article>
+    </section>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js"></script>
+<script src="{{ '/assets/js/treasurer.js' | relative_url }}?v={{ site.asset_version }}"></script>
