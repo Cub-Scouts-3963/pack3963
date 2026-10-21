@@ -1,1 +1,40 @@
 .treasurer-page-header{padding:34px 20px;text-align:center;background:#eef5fb}.treasurer-page-header p{margin:8px 0 0}.treasurer-shell{max-width:1220px;margin:0 auto;padding:32px 20px 56px}.treasurer-shell *{box-sizing:border-box}.card{margin:0 0 22px;padding:22px;background:#fff;border:1px solid #d8e0e8;border-radius:10px;box-shadow:0 4px 14px rgba(0,63,135,.07)}.treasurer-auth{max-width:700px;margin:0 auto}.portal-toolbar,.card-heading-row,.toolbar-actions,.filter-bar,.inline-form{display:flex;align-items:center;gap:12px}.portal-toolbar,.card-heading-row{justify-content:space-between}.portal-toolbar{margin-bottom:20px}.portal-toolbar h2,.card-heading-row h3{margin:0}.role-badge,.status-pill{display:inline-block;padding:4px 9px;border-radius:999px;background:#e7f0fa;color:var(--blue);font-size:.78rem;font-weight:800;text-transform:capitalize}.portal-tabs{display:flex;gap:6px;overflow-x:auto;margin-bottom:22px;padding:5px;background:#eef2f6;border-radius:9px}.portal-tab{flex:0 0 auto;padding:10px 13px;border:0;border-radius:6px;color:#344457;background:transparent;font:inherit;font-weight:700;cursor:pointer}.portal-tab.is-active{color:#fff;background:var(--blue)}.portal-panel{display:none}.portal-panel.is-active{display:block}.summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:22px}.summary-grid--compact{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:20px}.summary-card{min-height:126px;padding:18px;color:#26384b;background:#f7f9fb;border-top:5px solid var(--gold);border-radius:8px}.summary-card span,.summary-card small{display:block}.summary-card strong{display:block;margin:9px 0 5px;color:var(--blue);font-size:1.7rem}.portal-grid{display:grid;gap:20px}.portal-grid--two{grid-template-columns:repeat(2,minmax(0,1fr))}.portal-form{display:grid;gap:15px}.form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.portal-form label,.compact-form label,.file-drop{display:grid;gap:6px;font-weight:700;color:#33475b}.portal-form input,.portal-form select,.portal-form textarea,.compact-form input,.filter-bar input,.filter-bar select{width:100%;min-height:42px;padding:9px 11px;border:1px solid #aebac7;border-radius:6px;background:#fff;color:#26384b;font:inherit}.portal-form select[multiple]{min-height:175px}.portal-form small{font-weight:400}.filter-bar{margin-bottom:16px}.filter-bar input{flex:1 1 320px}.filter-bar select{flex:0 1 230px}.collapsible-form{border-top:5px solid var(--gold)}.form-status{min-height:1.2em;color:#38516a;font-weight:700}.form-status.is-error{color:#a1122f}.form-status.is-success{color:#24633f}.text-button{padding:4px;border:0;color:var(--blue);background:transparent;font:inherit;font-weight:700;text-decoration:underline;cursor:pointer}.table-wrap{overflow-x:auto;padding:0}table{width:100%;border-collapse:collapse}th,td{padding:12px 14px;border-bottom:1px solid #e2e7ec;text-align:left;vertical-align:top}th{color:#33475b;background:#f4f7f9;font-size:.78rem;letter-spacing:.03em;text-transform:uppercase}td.money,th.money{text-align:right;white-space:nowrap}tr.is-voided{opacity:.58;text-decoration:line-through}.balance-due{color:#a1122f;font-weight:800}.balance-credit{color:#24633f;font-weight:800}.dashboard-list{margin:0;padding-left:20px;line-height:1.8}.file-drop{padding:28px;text-align:center;border:2px dashed #8da3b8;border-radius:9px;background:#f7f9fb;cursor:pointer}.file-drop input{margin:8px auto 0}.action-group{display:flex;flex-wrap:wrap;gap:6px}.action-button{padding:5px 8px;border:1px solid #8799ab;border-radius:5px;color:#26384b;background:#fff;font-weight:700;cursor:pointer}.empty-row{padding:26px;text-align:center;color:#66788a}@media(max-width:900px){.summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:680px){.treasurer-shell{padding:22px 12px 44px}.portal-toolbar,.filter-bar,.inline-form{align-items:stretch;flex-direction:column}.toolbar-actions{flex-wrap:wrap}.portal-grid--two,.summary-grid,.summary-grid--compact,.form-grid{grid-template-columns:1fr}.summary-card{min-height:105px}.filter-bar input,.filter-bar select{flex-basis:auto}.portal-toolbar .btn-secondary,.inline-form .btn-blue{width:100%}th,td{padding:10px}}
+
+.check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  margin: 1rem 0;
+  font-weight: 600;
+}
+
+.check-row input {
+  width: auto;
+  margin-top: 0.2rem;
+  flex: 0 0 auto;
+}
+
+.portal-panel[data-panel="import"] {
+  display: none;
+  gap: 1rem;
+}
+
+.portal-panel[data-panel="import"].is-active {
+  display: grid;
+}
+
+.collapsible-form[hidden]{display:none!important}
+.account-picker-field{display:grid;gap:6px}
+.field-label{font-weight:700;color:#33475b}
+.account-picker{overflow:hidden;border:1px solid #aebac7;border-radius:7px;background:#fff}
+.account-picker-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) auto auto;align-items:center;gap:8px;padding:10px;border-bottom:1px solid #d8e0e8;background:#f7f9fb}
+.account-picker-toolbar input{width:100%;min-height:40px;padding:8px 10px;border:1px solid #aebac7;border-radius:6px;font:inherit}
+.account-picker-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));max-height:280px;overflow-y:auto;padding:8px}
+.account-picker-option{display:flex!important;grid-template-columns:none!important;align-items:flex-start;gap:9px!important;padding:9px 10px;border-radius:6px;color:#26384b!important;cursor:pointer}
+.account-picker-option:hover{background:#eef5fb}
+.account-picker-option[hidden]{display:none!important}
+.account-picker-option input{width:auto!important;min-height:0!important;margin:3px 0 0;accent-color:var(--blue)}
+.account-picker-option span,.account-picker-option small{display:block}
+.account-picker-option small{margin-top:2px;color:#617488;font-weight:400}
+#entry-account-count{display:block;padding:8px 12px;border-top:1px solid #e2e7ec;background:#f7f9fb;color:#38516a;font-weight:700}
+@media(max-width:680px){.account-picker-toolbar{grid-template-columns:1fr}.account-picker-toolbar .btn-secondary,.account-picker-toolbar .text-button{width:100%}.account-picker-options{grid-template-columns:1fr}}

@@ -81,7 +81,7 @@ styles:
     <section class="portal-panel" data-panel="accounts">
       <div class="filter-bar">
         <input id="account-search" type="search" placeholder="Search Scout, family, den, or ID">
-        <select id="balance-filter"><option value="all">All accounts</option><option value="due">Has a balance</option><option value="credit">Has a credit</option><option value="paid">Paid / zero balance</option><option value="inactive">Inactive</option></select>
+        <select id="balance-filter"><option value="current">Current accounts</option><option value="due">Has a balance</option><option value="credit">Has a credit</option><option value="paid">Paid / zero balance</option><option value="inactive">Removed / inactive</option><option value="all">Everything</option></select>
         <button class="btn-blue write-control" type="button" id="show-account-form">Add Scout or account</button>
       </div>
       <form id="account-form" class="card portal-form collapsible-form" hidden>
@@ -98,7 +98,7 @@ styles:
         <label>Notes<textarea name="notes" rows="2"></textarea></label>
         <button class="btn-blue" type="submit">Add account</button>
       </form>
-      <div class="table-wrap card"><table><thead><tr><th>Scout / account</th><th>Den</th><th>Type</th><th class="money">Balance</th><th>Status</th></tr></thead><tbody id="accounts-table"></tbody></table></div>
+      <div class="table-wrap card"><table><thead><tr><th>Scout / account</th><th>Family contacts</th><th>Den</th><th>Type</th><th class="money">Balance</th><th>Status</th><th class="write-control">Action</th></tr></thead><tbody id="accounts-table"></tbody></table></div>
     </section>
 
     <section class="portal-panel" data-panel="transactions">
@@ -118,7 +118,18 @@ styles:
           <label>Reference<input name="reference" placeholder="Check number or transfer note"></label>
         </div>
         <label>Description<input name="description" required placeholder="2026–27 Pack dues"></label>
-        <label>Apply to one or more accounts<select id="entry-accounts" name="account_ids" multiple size="8" required></select><small>Use Ctrl/Command or Shift to select several Scouts.</small></label>
+        <div class="account-picker-field">
+          <span class="field-label">Apply to one or more accounts</span>
+          <div class="account-picker" id="entry-account-picker">
+            <div class="account-picker-toolbar">
+              <input id="entry-account-search" type="search" placeholder="Find a Scout or family" aria-label="Find a Scout or family">
+              <button class="btn-secondary" type="button" id="select-visible-accounts">Select all shown</button>
+              <button class="text-button" type="button" id="clear-entry-accounts">Clear</button>
+            </div>
+            <div class="account-picker-options" id="entry-accounts" role="group" aria-label="Accounts"></div>
+            <small id="entry-account-count" aria-live="polite">0 accounts selected</small>
+          </div>
+        </div>
         <label>Notes<textarea name="notes" rows="2"></textarea></label>
         <button class="btn-blue" type="submit">Save entry to selected accounts</button>
       </form>
@@ -153,7 +164,21 @@ styles:
 
     <section class="portal-panel" data-panel="import">
       <article class="card">
-        <p class="page-kicker">Scoutbook starting point</p>
+        <p class="page-kicker">Annual roster</p>
+        <h3>Import a Scoutbook Roster Report</h3>
+        <p>Adds new Scouts and family accounts, updates den assignments, reconnects siblings to one household, and reactivates returning members. The file is processed in your browser and sent only to the private Pack database.</p>
+        <label class="file-drop">Choose Scoutbook Roster Report CSV<input id="roster-file" type="file" accept=".csv,text/csv"></label>
+        <div id="roster-preview" hidden>
+          <div class="summary-grid summary-grid--compact" id="roster-summary"></div>
+          <div class="table-wrap"><table><thead><tr><th>Scout</th><th>Family</th><th>Guardian</th><th>Den</th></tr></thead><tbody id="roster-table"></tbody></table></div>
+          <label class="check-row"><input id="archive-missing-roster" type="checkbox" checked> Mark roster-managed Scouts and families missing from this new report as inactive</label>
+          <button class="btn-blue write-control" id="run-roster-import" type="button">Update roster</button>
+        </div>
+        <p class="form-status" id="roster-status" role="status"></p>
+      </article>
+
+      <article class="card">
+        <p class="page-kicker">Scoutbook financial history</p>
         <h3>Import a Payment Log CSV</h3>
         <p>The file is processed in your browser and sent only to the private Pack database. Existing source IDs are skipped, so the same report can be safely checked again.</p>
         <label class="file-drop">Choose Scoutbook Payment Log CSV<input id="csv-file" type="file" accept=".csv,text/csv"></label>
