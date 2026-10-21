@@ -23,7 +23,7 @@
     const rs=await Promise.all([
       sb.from("account_balances").select("*").eq("active",true).order("display_name"),
       sb.from("order_campaigns").select("*").order("created_at",{ascending:false}),
-      sb.from("order_item_balances").select("*").order("created_at",{ascending:false}),
+      sb.from("order_item_balances").select("*").order("campaign_name").order("account_name"),
       sb.from("ledger_entries").select("id,account_id,order_item_id,entry_type,amount_cents,voided_at"),
       sb.from("email_messages").select("*").order("created_at",{ascending:false}).limit(100),
       sb.from("email_recipients").select("*").order("created_at",{ascending:false}).limit(1000),
