@@ -270,13 +270,15 @@ styles:
     <section class="portal-panel admin-only" data-panel="access">
       <article class="card">
         <h3>Authorized users</h3>
+        <p>Save access to email a welcome invitation with the user's role, sign-in steps, and a dashboard guide. Existing users can be invited again using Resend invitation.</p>
         <form id="access-form" class="inline-form portal-form">
-          <label>Email<input name="email" type="email" required></label>
-          <label>Name<input name="display_name"></label>
+          <label>Email<input name="email" type="email" maxlength="320" required></label>
+          <label>Name<input name="display_name" maxlength="120"></label>
           <label>Role<select name="role"><option value="treasurer">Treasurer</option><option value="viewer">View only</option><option value="admin">Administrator</option></select></label>
-          <button class="btn-blue" type="submit">Add or update</button>
+          <button class="btn-blue" type="submit">Save access &amp; send invitation</button>
         </form>
-        <div class="table-wrap"><table><thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th></tr></thead><tbody id="access-table"></tbody></table></div>
+        <p class="form-status" id="access-status" role="status"></p>
+        <div class="table-wrap"><table><thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>Invitation</th></tr></thead><tbody id="access-table"></tbody></table></div>
       </article>
     </section>
   </div>

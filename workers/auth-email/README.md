@@ -7,6 +7,19 @@ This Cloudflare Worker handles Supabase Auth's **Send Email** HTTP hook and send
 - Health check: `GET /health`
 - Supabase hook: `POST /hooks/supabase/send-email`
 - Production URL: `https://pack3963-auth-email.cubscouts3963.workers.dev/hooks/supabase/send-email`
+- Admin invitations: `POST /api/treasurer/invite-user` (authenticated administrator only)
+
+## Portal invitations
+
+In **Access**, **Save access & send invitation** saves the user's approved role and sends a welcome email. **Resend invitation** sends the same guide to an existing active user. The email includes their saved role, dashboard guide, confidentiality reminder, Pack support address, and a link to `https://www.pack3963.com/treasurer.html`.
+
+The invitation opens the portal; it is not an authentication token. Recipients enter their invited email address and request their own one-time sign-in email. This works for new and existing Supabase accounts, without creating a password or an expiring welcome link.
+
+The endpoint verifies the caller with Supabase Auth, requires a current active admin row, and reads the recipient and role from `authorized_users` using that caller's JWT and RLS. It does not grant access. It rejects inactive recipients, limits body size, and passes a stable retry key to Resend. A successful response means Resend accepted the email, not that inbox delivery is guaranteed. If sending fails, access remains saved and the admin sees a retry message.
+
+The canonical Worker is `cloudflare/pack3963-auth-email/worker.js`; `wrangler.jsonc` points there so deployment includes the authentication hook, family emails, and invitation endpoint. The old `src/index.js` re-exports it for compatibility.
+
+Run `node --test scripts/treasury-invitations.test.mjs` from the repository root. Tests mock all external calls and send no real email. Deploy the Worker using `workers/auth-email/wrangler.jsonc` before publishing the updated portal. Preserve the existing secrets and variables. No database migration is required for invitations.
 
 ## Required encrypted secrets
 
