@@ -52,6 +52,7 @@ styles:
       <button class="portal-tab" type="button" data-tab="communications">Family emails</button>
       <button class="portal-tab write-control" type="button" data-tab="bank">Bank balance</button>
       <button class="portal-tab" type="button" data-tab="import">Import</button>
+      <button class="portal-tab write-control" type="button" data-tab="categories">Categories</button>
       <button class="portal-tab admin-only" type="button" data-tab="access">Access</button>
     </nav>
     <p id="app-status" class="form-status" role="status"></p>
@@ -120,6 +121,7 @@ styles:
         </div>
         <div class="ledger-actions">
           <button class="btn-blue write-control" type="button" id="show-ledger-payment">Add payment</button>
+          <label class="check-row ledger-toggle"><input id="show-removed-ledger" type="checkbox"> Show removed entries</label>
           <button class="btn-secondary" type="button" id="export-ledger-csv">Export CSV</button>
           <button class="btn-secondary" type="button" id="print-account-ledger">Print / Save PDF</button>
         </div>
@@ -158,7 +160,7 @@ styles:
           <label>Type<select name="entry_type" required><option value="charge">Charge</option><option value="payment">Payment</option><option value="credit">Credit</option></select></label>
           <label>Amount<input name="amount" type="number" min="0.01" step="0.01" required></label>
           <label>Date<input name="occurred_on" type="date" required></label>
-          <label>Category<input name="category" placeholder="Dues, camping, T-shirt"></label>
+          <label>Category<select name="category" data-category-select="transactions" required><option value="">Choose a category</option></select></label>
           <label>Payment method<select name="payment_method"><option value="">Not applicable</option><option value="cash">Cash</option><option value="zelle">Zelle</option><option value="venmo">Venmo</option><option value="check">Check</option><option value="card">Card</option><option value="bank_transfer">Bank transfer</option><option value="other">Other</option></select></label>
           <label>Reference<input name="reference" placeholder="Check number or transfer note"></label>
         </div>
@@ -194,7 +196,7 @@ styles:
           <label>Amount<input name="amount" type="number" min="0.01" step="0.01" required></label>
           <label>Purchase date<input name="purchased_on" type="date" required></label>
           <label>Vendor<input name="vendor" required></label>
-          <label>Category<input name="category" placeholder="Scout Store, camping, supplies"></label>
+          <label>Category<select name="category" data-category-select="expenses" required><option value="">Choose a category</option></select></label>
           <label>Purchased by<input name="purchased_by"></label>
           <label>Reimburse to<input name="reimburse_to"></label>
           <label>Status<select name="status"><option value="recorded">Recorded</option><option value="submitted">Submitted</option><option value="approved">Approved</option><option value="paid">Paid</option></select></label>
@@ -223,7 +225,7 @@ styles:
         <p>Create something families can purchase or attend—shirts, camping food, outings, or another Pack item.</p>
         <div class="form-grid">
           <label>Order name<input name="name" required placeholder="Winter cabin trip"></label>
-          <label>Category<input name="category" required placeholder="Camping"></label>
+          <label>Category<select name="category" data-category-select="orders" required><option value="">Choose a category</option></select></label>
           <label>Price per item<input name="unit_price" type="number" min="0" step="0.01" required></label>
           <label>Payment due<input name="due_on" type="date"></label>
         </div>
@@ -308,6 +310,32 @@ styles:
       <p class="form-status" id="transfer-status" role="status"></p>
     </section>
 
+    <section class="portal-panel write-control" data-panel="categories">
+      <div class="filter-bar">
+        <input id="category-search" type="search" placeholder="Search categories">
+        <select id="category-status-filter"><option value="active">Active categories</option><option value="inactive">Inactive categories</option><option value="all">All categories</option></select>
+        <button class="btn-blue" id="show-category-form" type="button">Add category</button>
+      </div>
+      <form id="category-form" class="card portal-form collapsible-form" hidden>
+        <input name="category_id" type="hidden">
+        <input name="original_name" type="hidden">
+        <div class="card-heading-row"><h3 id="category-form-heading">Add a category</h3><button class="text-button" type="button" data-close-category-form>Close</button></div>
+        <div class="form-grid">
+          <label>Category name<input name="name" maxlength="80" required placeholder="Example: Pinewood Derby"></label>
+          <label>Sort order<input name="sort_order" type="number" min="0" max="9999" value="100" required></label>
+        </div>
+        <fieldset class="category-uses">
+          <legend>Available for</legend>
+          <label class="check-row"><input name="use_for_transactions" type="checkbox"> Charges and payments</label>
+          <label class="check-row"><input name="use_for_expenses" type="checkbox"> Pack expenses</label>
+          <label class="check-row"><input name="use_for_orders" type="checkbox"> Orders</label>
+        </fieldset>
+        <button class="btn-blue" type="submit">Save category</button>
+      </form>
+      <p id="category-status" class="form-status" role="status"></p>
+      <div class="table-wrap card"><table><thead><tr><th>Category</th><th>Available for</th><th>Order</th><th>Status</th><th>Action</th></tr></thead><tbody id="categories-table"></tbody></table></div>
+    </section>
+
     <section class="portal-panel admin-only" data-panel="access">
       <article class="card">
         <h3>Authorized users</h3>
@@ -328,4 +356,5 @@ styles:
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js"></script>
 <script src="{{ '/assets/js/treasurer.js' | relative_url }}?v={{ site.asset_version }}"></script>
 <script src="{{ '/assets/js/treasurer-orders.js' | relative_url }}?v={{ site.asset_version }}"></script>
+<script src="{{ '/assets/js/treasurer-categories.js' | relative_url }}?v={{ site.asset_version }}"></script>
 <script type="module" src="{{ '/assets/js/treasurer-transfers.mjs' | relative_url }}?v={{ site.asset_version }}"></script>

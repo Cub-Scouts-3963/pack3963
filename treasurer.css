@@ -65,3 +65,11 @@
 .portal-panel[data-panel="orders"] .account-picker-options,.portal-panel[data-panel="communications"] .account-picker-options{max-height:330px}
 #order-email-status{margin:0 0 14px}
 @media(max-width:680px){.portal-panel[data-panel="orders"] .filter-bar .btn-secondary,.portal-panel[data-panel="orders"] .filter-bar .btn-blue{width:100%}}
+
+
+.category-uses{display:flex;flex-wrap:wrap;gap:8px 24px;margin:0;padding:14px 16px;border:1px solid #d8e0e8;border-radius:7px}
+.category-uses legend{padding:0 6px;color:#33475b;font-weight:800}
+.category-uses .check-row{margin:0}
+.ledger-toggle{margin:0 auto 0 0}
+.money.balance-due,.money.balance-credit{font-variant-numeric:tabular-nums}
+@media(max-width:680px){.category-uses{display:grid}.ledger-toggle{margin:0}}
