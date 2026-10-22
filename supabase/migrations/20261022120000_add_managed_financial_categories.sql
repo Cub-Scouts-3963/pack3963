@@ -54,8 +54,12 @@ on conflict ((lower(trim(name)))) do update set
 
 -- Normalize the two fee labels created during initial setup.
 update public.ledger_entries
-set category = 'Pack fees', updated_at = now()
+set category = 'Pack fees', description = '2026–27 Pack fees', updated_at = now()
 where lower(trim(coalesce(category, ''))) in ('dues', '2026-27 pack fees');
+
+update public.ledger_entries
+set description = '2026–27 Pack fees', updated_at = now()
+where category = 'Pack fees' and description <> '2026–27 Pack fees';
 
 create or replace function public.rename_financial_category(p_category_id uuid, p_new_name text)
 returns public.financial_categories
