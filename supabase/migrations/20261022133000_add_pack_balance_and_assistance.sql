@@ -97,12 +97,13 @@ begin
     select greatest(charge_row.amount_cents - coalesce(sum(amount_cents) filter (where voided_at is null),0),0)
       into charge_remaining
       from public.ledger_entries where related_charge_id=p_charge_id;
+    if p_amount_cents > charge_remaining then raise exception 'Amount cannot exceed the selected charge balance'; end if;
   end if;
 
   if p_entry_type='assistance' then
     if p_charge_id is null then raise exception 'Financial assistance must be applied to a specific charge'; end if;
     if nullif(trim(coalesce(p_notes,'')),'') is null then raise exception 'Add a note explaining the Pack-covered assistance'; end if;
-    if p_amount_cents > least(account_row.amount_due_cents, charge_remaining) then raise exception 'Assistance cannot exceed the remaining balance'; end if;
+    if p_amount_cents > account_row.amount_due_cents then raise exception 'Assistance cannot exceed the account balance'; end if;
   elsif p_payment_method not in ('cash','zelle','venmo','check','card','bank_transfer','other') then
     raise exception 'Choose a payment method';
   end if;
