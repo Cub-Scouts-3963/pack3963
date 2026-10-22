@@ -13,6 +13,8 @@
   const today = () => new Date().toISOString().slice(0, 10);
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
   const money = (cents) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format((Number(cents) || 0) / 100);
+  const signedMoney = (entry) => `${entry.entry_type === "charge" ? "+" : "−"}${money(entry.amount_cents)}`;
+  const entryMoneyClass = (entry) => entry.entry_type === "charge" ? "balance-due" : "balance-credit";
   const cents = (value) => Math.round(Number(value) * 100);
   const human = (value) => String(value || "").replaceAll("_", " ").replace(/\b\w/g, c => c.toUpperCase());
   const status = (message, kind = "", target = "#app-status") => {
@@ -121,7 +123,7 @@
     ];
     $("#priority-list").innerHTML = priorities.map(x => `<li>${esc(x)}</li>`).join("");
     const recent = state.entries.filter(e => !e.voided_at).slice(0, 8);
-    $("#recent-activity").innerHTML = recent.length ? recent.map(e => `<tr><td>${esc(e.occurred_on)}</td><td>${esc(accountName(e.account_id))}</td><td>${esc(human(e.entry_type))}</td><td>${esc(e.description)}</td><td class="money">${money(e.amount_cents)}</td></tr>`).join("") : emptyRow(5, "No activity recorded yet.");
+    $("#recent-activity").innerHTML = recent.length ? recent.map(e => `<tr><td>${esc(e.occurred_on)}</td><td>${esc(accountName(e.account_id))}</td><td>${esc(human(e.entry_type))}</td><td>${esc(e.description)}</td><td class="money ${entryMoneyClass(e)}">${signedMoney(e)}</td></tr>`).join("") : emptyRow(5, "No activity recorded yet.");
   }
 
   function filteredAccounts() {
@@ -159,10 +161,10 @@
     return [account, ...state.accounts.filter(a => a.parent_account_id === account.id)];
   }
 
-  function ledgerRows(account) {
+  function ledgerRows(account, includeVoided = false) {
     const ids = new Set(ledgerScope(account).map(a => a.id));
     let running = 0;
-    return state.entries.filter(e => ids.has(e.account_id)).sort((a, b) =>
+    return state.entries.filter(e => ids.has(e.account_id) && (includeVoided || !e.voided_at)).sort((a, b) =>
       String(a.occurred_on).localeCompare(String(b.occurred_on)) || String(a.created_at).localeCompare(String(b.created_at))
     ).map(entry => {
       const impact = entry.voided_at ? 0 : (entry.entry_type === "charge" ? Number(entry.amount_cents) : -Number(entry.amount_cents));
@@ -180,7 +182,7 @@
     paymentForm.dataset.accountId = id;
     $("#show-ledger-payment").hidden = !account.active || !["admin", "treasurer"].includes(state.access?.role);
     const scope = ledgerScope(account);
-    const rows = ledgerRows(account);
+    const rows = ledgerRows(account, $("#show-removed-ledger")?.checked);
     const activeRows = rows.filter(e => !e.voided_at);
     const charges = activeRows.filter(e => e.entry_type === "charge").reduce((sum, e) => sum + Number(e.amount_cents), 0);
     const payments = activeRows.filter(e => e.entry_type !== "charge").reduce((sum, e) => sum + Number(e.amount_cents), 0);
@@ -193,7 +195,7 @@
     $("#ledger-payments").textContent = money(payments);
     $("#ledger-balance").textContent = money(balance);
     $("#ledger-balance").className = balance > 0 ? "balance-due" : balance < 0 ? "balance-credit" : "";
-    $("#ledger-table").innerHTML = rows.length ? rows.map(e => `<tr class="${e.voided_at ? "is-voided" : ""}"><td>${esc(e.occurred_on)}</td><td>${esc(accountName(e.account_id))}</td><td><strong>${esc(e.description)}</strong>${e.category ? `<br><small>${esc(e.category)}</small>` : ""}</td><td>${esc(human(e.entry_type))}</td><td class="money">${money(e.amount_cents)}</td><td class="money">${money(e.running_balance_cents)}</td><td>${e.voided_at ? "Removed" : "Posted"}</td></tr>`).join("") : emptyRow(7, "No ledger entries for this account.");
+    $("#ledger-table").innerHTML = rows.length ? rows.map(e => `<tr class="${e.voided_at ? "is-voided" : ""}"><td>${esc(e.occurred_on)}</td><td>${esc(accountName(e.account_id))}</td><td><strong>${esc(e.description)}</strong>${e.category ? `<br><small>${esc(e.category)}</small>` : ""}</td><td>${esc(human(e.entry_type))}</td><td class="money ${entryMoneyClass(e)}">${signedMoney(e)}</td><td class="money">${money(e.running_balance_cents)}</td><td>${e.voided_at ? "Removed" : "Posted"}</td></tr>`).join("") : emptyRow(7, "No ledger entries for this account.");
     $("#account-ledger").hidden = false;
     $("#account-ledger").scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -245,10 +247,10 @@
   function exportAccountLedger() {
     const account = state.accounts.find(a => a.id === state.activeLedgerId);
     if (!account) return;
-    const rows = ledgerRows(account);
+    const rows = ledgerRows(account, $("#show-removed-ledger")?.checked);
     const data = [
       ["Date","Account","Type","Description","Category","Payment method","Reference","Amount","Running balance","Status","Notes"],
-      ...rows.map(e => [e.occurred_on, accountName(e.account_id), human(e.entry_type), e.description, e.category || "", human(e.payment_method), e.reference || "", (Number(e.amount_cents) / 100).toFixed(2), (Number(e.running_balance_cents) / 100).toFixed(2), e.voided_at ? "Removed" : "Posted", e.notes || ""])
+      ...rows.map(e => [e.occurred_on, accountName(e.account_id), human(e.entry_type), e.description, e.category || "", human(e.payment_method), e.reference || "", ((e.entry_type === "charge" ? 1 : -1) * Number(e.amount_cents) / 100).toFixed(2), (Number(e.running_balance_cents) / 100).toFixed(2), e.voided_at ? "Removed" : "Posted", e.notes || ""])
     ];
     const blob = new Blob([data.map(row => row.map(csvCell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -288,7 +290,7 @@
       const action = canWrite ? (e.voided_at
         ? `<button class="action-button" data-restore-entry="${e.id}" type="button">Restore</button>`
         : `<button class="action-button" data-void-entry="${e.id}" type="button">Remove</button>`) : "";
-      return `<tr class="${e.voided_at ? "is-voided" : ""}"><td>${esc(e.occurred_on)}</td><td>${esc(accountName(e.account_id))}</td><td>${esc(human(e.entry_type))}</td><td><strong>${esc(e.description)}</strong>${e.category ? `<br><small>${esc(e.category)}</small>` : ""}${e.void_reason ? `<br><small>Removed: ${esc(e.void_reason)}</small>` : ""}</td><td>${esc(human(e.payment_method) || "—")}</td><td class="money">${money(e.amount_cents)}</td><td class="write-control"><div class="action-group">${action}</div></td></tr>`;
+      return `<tr class="${e.voided_at ? "is-voided" : ""}"><td>${esc(e.occurred_on)}</td><td>${esc(accountName(e.account_id))}</td><td>${esc(human(e.entry_type))}</td><td><strong>${esc(e.description)}</strong>${e.category ? `<br><small>${esc(e.category)}</small>` : ""}${e.void_reason ? `<br><small>Removed: ${esc(e.void_reason)}</small>` : ""}</td><td>${esc(human(e.payment_method) || "—")}</td><td class="money ${entryMoneyClass(e)}">${signedMoney(e)}</td><td class="write-control"><div class="action-group">${action}</div></td></tr>`;
     }).join("") : emptyRow(7, "No matching charges or payments.");
   }
 
@@ -731,6 +733,7 @@
       catch (error) { status(error.message || "Unable to update the account.", "error"); }
     });
     $("#close-account-ledger").addEventListener("click", () => { $("#account-ledger").hidden = true; state.activeLedgerId = null; });
+    $("#show-removed-ledger").addEventListener("change", () => { if (state.activeLedgerId) renderAccountLedger(state.activeLedgerId); });
     $("#export-ledger-csv").addEventListener("click", exportAccountLedger);
     $("#show-ledger-payment").addEventListener("click", openLedgerPayment);
     $("#close-ledger-payment").addEventListener("click", () => { $("#ledger-payment-form").hidden = true; });
