@@ -199,7 +199,7 @@
     $("#ledger-payments").textContent = money(payments);
     $("#ledger-balance").textContent = money(balance);
     $("#ledger-balance").className = balance > 0 ? "balance-due" : balance < 0 ? "balance-credit" : "";
-    $("#ledger-table").innerHTML = rows.length ? rows.map(e => `<tr class="${e.voided_at ? "is-voided" : ""}"><td>${esc(e.occurred_on)}</td><td>${esc(accountName(e.account_id))}</td><td><strong>${esc(e.description)}</strong>${e.category ? `<br><small>${esc(e.category)}</small>` : ""}</td><td>${esc(human(e.entry_type))}</td><td class="money ${entryMoneyClass(e)}">${signedMoney(e)}</td><td class="money">${money(e.running_balance_cents)}</td><td>${e.voided_at ? "Removed" : "Posted"}</td></tr>`).join("") : emptyRow(7, "No ledger entries for this account.");
+    $("#ledger-table").innerHTML = rows.length ? rows.map(e => `<tr class="${e.voided_at ? "is-voided" : ""}"><td>${esc(e.occurred_on)}</td><td>${esc(accountName(e.account_id))}</td><td><strong>${esc(e.description)}</strong>${e.category ? `<br><small>${esc(e.category)}</small>` : ""}${e.affects_pack_balance ? '<br><small class="balance-credit">Included in Pack balance</small>' : ""}</td><td>${esc(human(e.entry_type))}</td><td class="money ${entryMoneyClass(e)}">${signedMoney(e)}</td><td class="money">${money(e.running_balance_cents)}</td><td>${e.voided_at ? "Removed" : "Posted"}</td></tr>`).join("") : emptyRow(7, "No ledger entries for this account.");
     $("#account-ledger").hidden = false;
     $("#account-ledger").scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -328,7 +328,7 @@
       const action = canWrite ? (e.voided_at
         ? `<button class="action-button" data-restore-entry="${e.id}" type="button">Restore</button>`
         : `<button class="action-button" data-void-entry="${e.id}" type="button">Remove</button>`) : "";
-      return `<tr class="${e.voided_at ? "is-voided" : ""}"><td>${esc(e.occurred_on)}</td><td>${esc(accountName(e.account_id))}</td><td>${esc(human(e.entry_type))}</td><td><strong>${esc(e.description)}</strong>${e.category ? `<br><small>${esc(e.category)}</small>` : ""}${e.void_reason ? `<br><small>Removed: ${esc(e.void_reason)}</small>` : ""}</td><td>${esc(human(e.payment_method) || "—")}</td><td class="money ${entryMoneyClass(e)}">${signedMoney(e)}</td><td class="write-control"><div class="action-group">${action}</div></td></tr>`;
+      return `<tr class="${e.voided_at ? "is-voided" : ""}"><td>${esc(e.occurred_on)}</td><td>${esc(accountName(e.account_id))}</td><td>${esc(human(e.entry_type))}</td><td><strong>${esc(e.description)}</strong>${e.category ? `<br><small>${esc(e.category)}</small>` : ""}${e.affects_pack_balance ? '<br><small class="balance-credit">Included in Pack balance</small>' : ""}${e.void_reason ? `<br><small>Removed: ${esc(e.void_reason)}</small>` : ""}</td><td>${esc(human(e.payment_method) || "—")}</td><td class="money ${entryMoneyClass(e)}">${signedMoney(e)}</td><td class="write-control"><div class="action-group">${action}</div></td></tr>`;
     }).join("") : emptyRow(7, "No matching charges or payments.");
   }
 
