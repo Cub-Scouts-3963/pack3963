@@ -102,10 +102,14 @@
 
   function renderSummary() {
     const s = state.summary || {};
-    $("#summary-bank").textContent = s.latest_bank_balance_cents == null ? "—" : money(s.latest_bank_balance_cents);
-    $("#summary-bank-date").textContent = s.latest_bank_balance_date ? `As of ${s.latest_bank_balance_date}` : "No snapshot yet";
+    $("#summary-bank").textContent = s.projected_bank_balance_cents == null ? "—" : money(s.projected_bank_balance_cents);
+    $("#summary-bank-date").textContent = s.latest_bank_balance_date ? `Projected from snapshot dated ${s.latest_bank_balance_date}` : "No snapshot yet";
     $("#bank-current-balance").textContent = $("#summary-bank").textContent;
-    $("#bank-current-date").textContent = s.latest_bank_balance_date ? `As of ${s.latest_bank_balance_date}` : "No balance recorded yet";
+    $("#bank-current-date").textContent = s.latest_bank_balance_date ? `Projected from reconciled balance dated ${s.latest_bank_balance_date}` : "No balance recorded yet";
+    $("#bank-reconciliation").hidden = s.latest_bank_balance_cents == null;
+    $("#bank-snapshot-balance").textContent = money(s.latest_bank_balance_cents);
+    $("#bank-income").textContent = "+" + money(s.pack_income_since_snapshot_cents);
+    $("#bank-spending").textContent = "−" + money(s.pack_spending_since_snapshot_cents);
     $("#summary-due").textContent = money(s.total_due_cents);
     $("#summary-credits").textContent = money(s.total_credit_cents);
     $("#summary-expenses").textContent = money(s.total_expenses_cents);
@@ -195,47 +199,89 @@
     $("#ledger-payments").textContent = money(payments);
     $("#ledger-balance").textContent = money(balance);
     $("#ledger-balance").className = balance > 0 ? "balance-due" : balance < 0 ? "balance-credit" : "";
-    $("#ledger-table").innerHTML = rows.length ? rows.map(e => `<tr class="${e.voided_at ? "is-voided" : ""}"><td>${esc(e.occurred_on)}</td><td>${esc(accountName(e.account_id))}</td><td><strong>${esc(e.description)}</strong>${e.category ? `<br><small>${esc(e.category)}</small>` : ""}</td><td>${esc(human(e.entry_type))}</td><td class="money ${entryMoneyClass(e)}">${signedMoney(e)}</td><td class="money">${money(e.running_balance_cents)}</td><td>${e.voided_at ? "Removed" : "Posted"}</td></tr>`).join("") : emptyRow(7, "No ledger entries for this account.");
+    $("#ledger-table").innerHTML = rows.length ? rows.map(e => `<tr class="${e.voided_at ? "is-voided" : ""}"><td>${esc(e.occurred_on)}</td><td>${esc(accountName(e.account_id))}</td><td><strong>${esc(e.description)}</strong>${e.category ? `<br><small>${esc(e.category)}</small>` : ""}${e.affects_pack_balance ? '<br><small class="balance-credit">Included in Pack balance</small>' : ""}</td><td>${esc(human(e.entry_type))}</td><td class="money ${entryMoneyClass(e)}">${signedMoney(e)}</td><td class="money">${money(e.running_balance_cents)}</td><td>${e.voided_at ? "Removed" : "Posted"}</td></tr>`).join("") : emptyRow(7, "No ledger entries for this account.");
     $("#account-ledger").hidden = false;
     $("#account-ledger").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function chargeRemaining(charge) {
+    const settled = state.entries.filter(entry => entry.related_charge_id === charge.id && !entry.voided_at && entry.entry_type !== "charge")
+      .reduce((sum, entry) => sum + Number(entry.amount_cents), 0);
+    return Math.max(0, Number(charge.amount_cents) - settled);
+  }
+
+  function syncLedgerSettlementForm() {
+    const form = $("#ledger-payment-form");
+    const assistance = form.elements.settlement_type.value === "assistance";
+    $("#ledger-settlement-heading").textContent = assistance ? "Record Pack-covered assistance" : "Record a family payment";
+    $("#ledger-payment-method-field").hidden = assistance;
+    form.elements.payment_method.required = !assistance;
+    $("#ledger-balance-impact-field").hidden = assistance;
+    $("#ledger-assistance-help").hidden = !assistance;
+    form.elements.notes.required = assistance;
+    form.elements.charge_id.required = assistance;
+    $("#save-ledger-settlement").textContent = assistance ? "Apply Pack assistance" : "Save payment";
+    const option = form.elements.charge_id.selectedOptions[0];
+    if (option?.dataset.remaining && (assistance || !form.elements.amount.value)) {
+      form.elements.amount.value = (Number(option.dataset.remaining) / 100).toFixed(2);
+    }
   }
 
   function openLedgerPayment() {
     if (!["admin", "treasurer"].includes(state.access?.role)) return;
     const account = state.accounts.find(a => a.id === state.activeLedgerId);
     if (!account?.active) return;
-    const form = $("#ledger-payment-form"); form.reset(); form.dataset.accountId = account.id; delete form.dataset.paymentId;
+    const form = $("#ledger-payment-form"); form.reset(); form.dataset.accountId = account.id; delete form.dataset.settlementId;
     form.elements.occurred_on.value = today();
-    $("#ledger-payment-account").textContent = `Payment into ${account.display_name}'s account. Family payments for another Scout must be recorded in that Scout's ledger.`;
-    $("#ledger-payment-charge").innerHTML = '<option value="">General account payment</option>' + state.entries.filter(e => e.account_id === account.id && e.entry_type === "charge" && !e.voided_at).map(e => `<option value="${esc(e.id)}">${esc(e.description)} — ${money(e.amount_cents)}</option>`).join("");
+    form.elements.affects_pack_balance.checked = true;
+    $("#ledger-payment-account").textContent = `Record money received from ${account.display_name}, or document a fee the Pack is covering. Family payments for another Scout must be recorded in that Scout's ledger.`;
+    const charges = state.entries.filter(entry => entry.account_id === account.id && entry.entry_type === "charge" && !entry.voided_at)
+      .map(charge => ({ charge, remaining: chargeRemaining(charge) })).filter(item => item.remaining > 0);
+    $("#ledger-payment-charge").innerHTML = '<option value="">General account payment</option>' + charges.map(({ charge, remaining }) =>
+      `<option value="${esc(charge.id)}" data-remaining="${remaining}">${esc(charge.description)} — ${money(remaining)} remaining</option>`).join("");
+    syncLedgerSettlementForm();
     status("", "", "#ledger-payment-status"); form.hidden = false;
   }
 
   async function saveLedgerPayment(form) {
-    if (!["admin", "treasurer"].includes(state.access?.role)) throw new Error("Only admins and treasurers can record payments.");
+    if (!["admin", "treasurer"].includes(state.access?.role)) throw new Error("Only admins and treasurers can record payments or assistance.");
     const account = state.accounts.find(a => a.id === form.dataset.accountId);
     if (!account?.active) throw new Error("Choose an active account.");
     const f = new FormData(form), amount = String(f.get("amount") || ""), amount_cents = cents(amount);
+    const settlementType = String(f.get("settlement_type") || "payment");
+    if (!["payment", "assistance"].includes(settlementType)) throw new Error("Choose whether this is a family payment or Pack assistance.");
     if (!/^\d+(\.\d{1,2})?$/.test(amount) || !Number.isSafeInteger(amount_cents) || amount_cents <= 0 || amount_cents > 2147483647) throw new Error("Enter a positive amount with no more than two decimal places.");
     const occurred_on = String(f.get("occurred_on") || "");
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(occurred_on) || !Number.isFinite(Date.parse(occurred_on)) || new Date(occurred_on).toISOString().slice(0, 10) !== occurred_on) throw new Error("Enter a valid payment date.");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(occurred_on) || !Number.isFinite(Date.parse(occurred_on)) || new Date(occurred_on).toISOString().slice(0, 10) !== occurred_on) throw new Error("Enter a valid date.");
+    if (settlementType === "assistance" && !f.get("charge_id")) throw new Error("Choose the specific fee the Pack is covering.");
+    if (settlementType === "assistance" && !String(f.get("notes") || "").trim()) throw new Error("Add a note explaining the financial assistance.");
     const method = String(f.get("payment_method") || "");
-    if (!["cash", "zelle", "venmo", "check", "card", "bank_transfer", "other"].includes(method)) throw new Error("Choose a payment method.");
-    let charge = null;
+    if (settlementType === "payment" && !["cash", "zelle", "venmo", "check", "card", "bank_transfer", "other"].includes(method)) throw new Error("Choose a payment method.");
     if (f.get("charge_id")) {
-      const r = await client.from("ledger_entries").select("*").eq("id", f.get("charge_id")).maybeSingle();
-      if (r.error) throw r.error;
-      charge = r.data;
-      if (!charge || charge.account_id !== account.id || charge.entry_type !== "charge" || charge.voided_at) throw new Error("The selected charge is no longer available. Reopen Add payment.");
+      const chargeResult = await client.from("ledger_entries").select("*").eq("id", f.get("charge_id")).maybeSingle();
+      if (chargeResult.error) throw chargeResult.error;
+      const charge = chargeResult.data;
+      if (!charge || charge.account_id !== account.id || charge.entry_type !== "charge" || charge.voided_at) throw new Error("The selected charge is no longer available. Reopen the form.");
     }
-    form.dataset.paymentId ||= crypto.randomUUID();
-    const row = { id: form.dataset.paymentId, account_id: account.id, entry_type: "payment", amount_cents, occurred_on, payment_method: method, description: charge ? `Payment — ${charge.description}` : "Account payment", category: charge?.category || null, order_item_id: charge?.order_item_id || null, reference: String(f.get("reference") || "").trim() || null, notes: String(f.get("notes") || "").trim() || null, source: "manual" };
-    const { error } = await client.from("ledger_entries").insert(row); if (error) throw error;
-    form.hidden = true; form.reset(); delete form.dataset.paymentId;
+    form.dataset.settlementId ||= crypto.randomUUID();
+    const result = await client.rpc("record_account_settlement", {
+      p_entry_id: form.dataset.settlementId,
+      p_account_id: account.id,
+      p_entry_type: settlementType,
+      p_amount_cents: amount_cents,
+      p_occurred_on: occurred_on,
+      p_charge_id: f.get("charge_id") || null,
+      p_payment_method: settlementType === "payment" ? method : null,
+      p_reference: String(f.get("reference") || "").trim() || null,
+      p_notes: String(f.get("notes") || "").trim() || null,
+      p_affects_pack_balance: settlementType === "payment" && f.has("affects_pack_balance")
+    });
+    if (result.error) throw result.error;
+    form.hidden = true; form.reset(); delete form.dataset.settlementId;
     await loadAll();
     if (state.activeLedgerId === account.id) renderAccountLedger(account.id);
     window.dispatchEvent(new Event("treasury-ledger-updated"));
-    status(`Payment of ${money(amount_cents)} recorded for ${account.display_name}.`, "success");
+    status(`${settlementType === "assistance" ? "Pack assistance" : "Payment"} of ${money(amount_cents)} recorded for ${account.display_name}.`, "success");
   }
 
   function csvCell(value) {
@@ -290,7 +336,7 @@
       const action = canWrite ? (e.voided_at
         ? `<button class="action-button" data-restore-entry="${e.id}" type="button">Restore</button>`
         : `<button class="action-button" data-void-entry="${e.id}" type="button">Remove</button>`) : "";
-      return `<tr class="${e.voided_at ? "is-voided" : ""}"><td>${esc(e.occurred_on)}</td><td>${esc(accountName(e.account_id))}</td><td>${esc(human(e.entry_type))}</td><td><strong>${esc(e.description)}</strong>${e.category ? `<br><small>${esc(e.category)}</small>` : ""}${e.void_reason ? `<br><small>Removed: ${esc(e.void_reason)}</small>` : ""}</td><td>${esc(human(e.payment_method) || "—")}</td><td class="money ${entryMoneyClass(e)}">${signedMoney(e)}</td><td class="write-control"><div class="action-group">${action}</div></td></tr>`;
+      return `<tr class="${e.voided_at ? "is-voided" : ""}"><td>${esc(e.occurred_on)}</td><td>${esc(accountName(e.account_id))}</td><td>${esc(human(e.entry_type))}</td><td><strong>${esc(e.description)}</strong>${e.category ? `<br><small>${esc(e.category)}</small>` : ""}${e.affects_pack_balance ? '<br><small class="balance-credit">Included in Pack balance</small>' : ""}${e.void_reason ? `<br><small>Removed: ${esc(e.void_reason)}</small>` : ""}</td><td>${esc(human(e.payment_method) || "—")}</td><td class="money ${entryMoneyClass(e)}">${signedMoney(e)}</td><td class="write-control"><div class="action-group">${action}</div></td></tr>`;
     }).join("") : emptyRow(7, "No matching charges or payments.");
   }
 
@@ -312,8 +358,8 @@
       const receipts = state.receipts.filter(r => r.expense_id === e.id);
       const receipt = receipts.length ? receipts.map(r => `<button class="text-button" type="button" data-open-receipt="${r.storage_path}">${esc(r.original_filename)}</button>`).join("<br>") : "Missing";
       const action = canWrite ? (e.voided_at ? `<button class="action-button" data-restore-expense="${e.id}" type="button">Restore</button>` : `<button class="action-button" data-void-expense="${e.id}" type="button">Remove</button>`) : "";
-      return `<tr class="${e.voided_at ? "is-voided" : ""}"><td>${esc(e.purchased_on)}</td><td><strong>${esc(e.vendor)}</strong>${e.category ? `<br><small>${esc(e.category)}</small>` : ""}</td><td>${esc(human(e.expense_type))}<br><span class="status-pill">${esc(human(e.status))}</span></td><td>${esc(e.expense_type === "reimbursement" ? e.reimburse_to : e.purchased_by || "Pack")}</td><td>${receipt}</td><td class="money">${money(e.amount_cents)}</td><td class="write-control">${action}</td></tr>`;
-    }).join("") : emptyRow(7, "No matching expenses.");
+      return `<tr class="${e.voided_at ? "is-voided" : ""}"><td>${esc(e.purchased_on)}</td><td><strong>${esc(e.vendor)}</strong>${e.category ? `<br><small>${esc(e.category)}</small>` : ""}</td><td>${esc(human(e.expense_type))}<br><span class="status-pill">${esc(human(e.status))}</span></td><td>${esc(e.expense_type === "reimbursement" ? e.reimburse_to : e.purchased_by || "Pack")}</td><td>${e.affects_pack_balance ? '<span class="status-pill">Deducted</span>' : "Not deducted"}</td><td>${receipt}</td><td class="money">${money(e.amount_cents)}</td><td class="write-control">${action}</td></tr>`;
+    }).join("") : emptyRow(8, "No matching expenses.");
   }
 
   function renderAccess() {
@@ -414,7 +460,8 @@
       category: String(f.get("category") || "").trim() || null,
       payment_method: String(f.get("payment_method") || "") || null,
       reference: String(f.get("reference") || "").trim() || null,
-      notes: String(f.get("notes") || "").trim() || null, batch_id: batch
+      notes: String(f.get("notes") || "").trim() || null, batch_id: batch,
+      affects_pack_balance: f.get("entry_type") === "payment" && f.has("affects_pack_balance")
     }));
     const { error } = await client.from("ledger_entries").insert(rows); if (error) throw error;
   }
@@ -425,7 +472,8 @@
       expense_type: f.get("expense_type"), amount_cents: cents(f.get("amount")), purchased_on: f.get("purchased_on"),
       vendor: String(f.get("vendor")).trim(), category: String(f.get("category") || "").trim() || null,
       purchased_by: String(f.get("purchased_by") || "").trim() || null, reimburse_to: String(f.get("reimburse_to") || "").trim() || null,
-      status: f.get("status"), description: String(f.get("description") || "").trim() || null, notes: String(f.get("notes") || "").trim() || null
+      status: f.get("status"), description: String(f.get("description") || "").trim() || null, notes: String(f.get("notes") || "").trim() || null,
+      affects_pack_balance: f.has("affects_pack_balance")
     };
     const { data, error } = await client.from("expenses").insert(row).select().single(); if (error) throw error;
     const file = f.get("receipt");
@@ -703,6 +751,7 @@
       updateAccountPickerCount();
     });
     $("#transaction-search").addEventListener("input", renderTransactions); $("#transaction-filter").addEventListener("change", renderTransactions);
+    $("#entry-form [name='entry_type']").addEventListener("change", e => { $("#entry-balance-impact-field").hidden = e.target.value !== "payment"; });
     $("#expense-search").addEventListener("input", renderExpenses); $("#expense-filter").addEventListener("change", renderExpenses);
     $("#account-form").addEventListener("submit", e => { e.preventDefault(); submitHandler(e.currentTarget, saveAccount, "Account added."); });
     $("#entry-form").addEventListener("submit", e => { e.preventDefault(); submitHandler(e.currentTarget, saveEntry, "Charge or payment saved."); });
@@ -736,6 +785,8 @@
     $("#show-removed-ledger").addEventListener("change", () => { if (state.activeLedgerId) renderAccountLedger(state.activeLedgerId); });
     $("#export-ledger-csv").addEventListener("click", exportAccountLedger);
     $("#show-ledger-payment").addEventListener("click", openLedgerPayment);
+    $("#ledger-settlement-type").addEventListener("change", syncLedgerSettlementForm);
+    $("#ledger-payment-charge").addEventListener("change", syncLedgerSettlementForm);
     $("#close-ledger-payment").addEventListener("click", () => { $("#ledger-payment-form").hidden = true; });
     $("#ledger-payment-form").addEventListener("submit", async e => {
       e.preventDefault(); const form = e.currentTarget, button = form.querySelector("button[type=submit]");

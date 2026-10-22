@@ -59,7 +59,7 @@ styles:
 
     <section class="portal-panel is-active" data-panel="dashboard">
       <div class="summary-grid">
-        <article class="summary-card"><span>Bank balance</span><strong id="summary-bank">—</strong><small id="summary-bank-date">No snapshot yet</small><button class="text-button write-control" type="button" data-go-tab="bank">Manage balance</button></article>
+        <article class="summary-card"><span>Projected Pack balance</span><strong id="summary-bank">—</strong><small id="summary-bank-date">No snapshot yet</small><button class="text-button write-control" type="button" data-go-tab="bank">Manage balance</button></article>
         <article class="summary-card"><span>Balances due</span><strong id="summary-due">—</strong><small id="summary-due-count"></small></article>
         <article class="summary-card"><span>Account credits</span><strong id="summary-credits">—</strong><small id="summary-credit-count"></small></article>
         <article class="summary-card"><span>Pack expenses</span><strong id="summary-expenses">—</strong><small id="summary-reimbursements"></small></article>
@@ -74,8 +74,13 @@ styles:
     <section class="portal-panel write-control" data-panel="bank" aria-labelledby="bank-heading">
       <article class="card">
         <div class="card-heading-row"><h3 id="bank-heading">Bank balance</h3><button class="btn-blue" id="show-bank-form" type="button">Update balance</button></div>
-        <p>Record the balance shown by the Pack's bank account or statement. This dated snapshot is separate from Scout and family balances; recording charges or payments does not automatically change it.</p>
+        <p>Record the actual balance from the Pack bank or credit-card statement. The projected balance then adds received family payments and subtracts Pack-paid expenses entered after that snapshot.</p>
         <div class="bank-balance-current"><strong id="bank-current-balance">—</strong><span id="bank-current-date">No balance recorded yet</span></div>
+        <div class="balance-reconciliation" id="bank-reconciliation" hidden>
+          <div><span>Last reconciled balance</span><strong id="bank-snapshot-balance">$0.00</strong></div>
+          <div><span>Family payments received</span><strong class="balance-credit" id="bank-income">+$0.00</strong></div>
+          <div><span>Pack-paid expenses</span><strong class="balance-due" id="bank-spending">−$0.00</strong></div>
+        </div>
       </article>
       <form id="bank-form" class="card portal-form collapsible-form" hidden>
         <div class="card-heading-row"><h3>Update bank balance</h3><button class="text-button" type="button" data-close-form="bank-form">Cancel</button></div>
@@ -126,17 +131,20 @@ styles:
           <button class="btn-secondary" type="button" id="print-account-ledger">Print / Save PDF</button>
         </div>
         <form id="ledger-payment-form" class="portal-form" hidden>
-          <div class="card-heading-row"><h3>Record a payment</h3><button class="text-button" type="button" id="close-ledger-payment">Cancel</button></div>
+          <div class="card-heading-row"><h3 id="ledger-settlement-heading">Record a payment or Pack assistance</h3><button class="text-button" type="button" id="close-ledger-payment">Cancel</button></div>
           <p id="ledger-payment-account"></p>
-          <label>Apply to charge<select name="charge_id" id="ledger-payment-charge"><option value="">General account payment</option></select></label>
           <div class="form-grid">
+            <label>Record as<select name="settlement_type" id="ledger-settlement-type" required><option value="payment">Family payment received</option><option value="assistance">Pack-covered financial assistance</option></select></label>
+            <label>Apply to charge<select name="charge_id" id="ledger-payment-charge"><option value="">General account payment</option></select></label>
             <label>Amount<input name="amount" type="number" min="0.01" step="0.01" required></label>
             <label>Date<input name="occurred_on" type="date" required></label>
-            <label>Payment method<select name="payment_method" required><option value="">Choose method</option><option value="cash">Cash</option><option value="zelle">Zelle</option><option value="venmo">Venmo</option><option value="check">Check</option><option value="card">Card</option><option value="bank_transfer">Bank transfer</option><option value="other">Other</option></select></label>
+            <label id="ledger-payment-method-field">Payment method<select name="payment_method" required><option value="">Choose method</option><option value="cash">Cash</option><option value="zelle">Zelle</option><option value="venmo">Venmo</option><option value="check">Check</option><option value="card">Card</option><option value="bank_transfer">Bank transfer</option><option value="other">Other</option></select></label>
             <label>Reference<input name="reference" placeholder="Check number or transfer note"></label>
           </div>
+          <label class="check-row" id="ledger-balance-impact-field"><input name="affects_pack_balance" type="checkbox" checked> Add these received funds to the projected Pack balance</label>
+          <p class="field-help" id="ledger-assistance-help" hidden>Choose the fee being covered and add a note explaining the assistance. This clears the Scout or family balance without recording cash received.</p>
           <label>Notes<textarea name="notes" rows="2"></textarea></label>
-          <button class="btn-blue" type="submit">Save payment</button>
+          <button class="btn-blue" type="submit" id="save-ledger-settlement">Save payment</button>
           <p id="ledger-payment-status" class="form-status" role="status"></p>
         </form>
         <div class="table-wrap ledger-table-wrap">
@@ -151,7 +159,7 @@ styles:
     <section class="portal-panel" data-panel="transactions">
       <div class="filter-bar">
         <input id="transaction-search" type="search" placeholder="Search account, description, category, or method">
-        <select id="transaction-filter"><option value="active">Active entries</option><option value="charge">Charges</option><option value="payment">Payments</option><option value="credit">Credits</option><option value="voided">Removed / voided</option><option value="all">Everything</option></select>
+        <select id="transaction-filter"><option value="active">Active entries</option><option value="charge">Charges</option><option value="payment">Payments</option><option value="credit">Credits</option><option value="assistance">Pack assistance</option><option value="voided">Removed / voided</option><option value="all">Everything</option></select>
         <button class="btn-blue write-control" type="button" id="show-entry-form">Add charge or payment</button>
       </div>
       <form id="entry-form" class="card portal-form collapsible-form" hidden>
@@ -164,6 +172,7 @@ styles:
           <label>Payment method<select name="payment_method"><option value="">Not applicable</option><option value="cash">Cash</option><option value="zelle">Zelle</option><option value="venmo">Venmo</option><option value="check">Check</option><option value="card">Card</option><option value="bank_transfer">Bank transfer</option><option value="other">Other</option></select></label>
           <label>Reference<input name="reference" placeholder="Check number or transfer note"></label>
         </div>
+        <label class="check-row" id="entry-balance-impact-field" hidden><input name="affects_pack_balance" type="checkbox"> Add received funds to the projected Pack balance</label>
         <label>Description<input name="description" required placeholder="2026–27 Pack dues"></label>
         <div class="account-picker-field">
           <span class="field-label">Apply to one or more accounts</span>
@@ -192,7 +201,7 @@ styles:
       <form id="expense-form" class="card portal-form collapsible-form" hidden>
         <div class="card-heading-row"><h3>Record Pack expense</h3><button type="button" class="text-button" data-close-form="expense-form">Close</button></div>
         <div class="form-grid">
-          <label>Expense type<select name="expense_type" required><option value="pack_card">Pack card</option><option value="reimbursement">Reimburse someone</option></select></label>
+          <label>Paid by<select name="expense_type" required><option value="pack_card">Pack card / Pack bank account</option><option value="reimbursement">A person who needs reimbursement</option></select></label>
           <label>Amount<input name="amount" type="number" min="0.01" step="0.01" required></label>
           <label>Purchase date<input name="purchased_on" type="date" required></label>
           <label>Vendor<input name="vendor" required></label>
@@ -202,11 +211,12 @@ styles:
           <label>Status<select name="status"><option value="recorded">Recorded</option><option value="submitted">Submitted</option><option value="approved">Approved</option><option value="paid">Paid</option></select></label>
           <label>Receipt (PDF or image, 10 MB max)<input name="receipt" type="file" accept="image/jpeg,image/png,image/webp,application/pdf"></label>
         </div>
+        <label class="check-row"><input name="affects_pack_balance" type="checkbox" checked> Deduct this expense from the projected Pack balance</label>
         <label>Description<input name="description"></label>
         <label>Notes<textarea name="notes" rows="2"></textarea></label>
         <button class="btn-blue" type="submit">Save expense</button>
       </form>
-      <div class="table-wrap card"><table><thead><tr><th>Date</th><th>Vendor</th><th>Type / status</th><th>Paid by</th><th>Receipt</th><th class="money">Amount</th><th class="write-control">Action</th></tr></thead><tbody id="expenses-table"></tbody></table></div>
+      <div class="table-wrap card"><table><thead><tr><th>Date</th><th>Vendor</th><th>Type / status</th><th>Paid by</th><th>Pack balance</th><th>Receipt</th><th class="money">Amount</th><th class="write-control">Action</th></tr></thead><tbody id="expenses-table"></tbody></table></div>
     </section>
 
 
