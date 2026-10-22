@@ -248,13 +248,21 @@
     const account = state.accounts.find(a => a.id === form.dataset.accountId);
     if (!account?.active) throw new Error("Choose an active account.");
     const f = new FormData(form), amount = String(f.get("amount") || ""), amount_cents = cents(amount);
-    const settlementType = String(f.get("settlement_type") || "");
+    const settlementType = String(f.get("settlement_type") || "payment");
     if (!["payment", "assistance"].includes(settlementType)) throw new Error("Choose whether this is a family payment or Pack assistance.");
     if (!/^\d+(\.\d{1,2})?$/.test(amount) || !Number.isSafeInteger(amount_cents) || amount_cents <= 0 || amount_cents > 2147483647) throw new Error("Enter a positive amount with no more than two decimal places.");
     const occurred_on = String(f.get("occurred_on") || "");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(occurred_on) || !Number.isFinite(Date.parse(occurred_on)) || new Date(occurred_on).toISOString().slice(0, 10) !== occurred_on) throw new Error("Enter a valid date.");
     if (settlementType === "assistance" && !f.get("charge_id")) throw new Error("Choose the specific fee the Pack is covering.");
     if (settlementType === "assistance" && !String(f.get("notes") || "").trim()) throw new Error("Add a note explaining the financial assistance.");
+    const method = String(f.get("payment_method") || "");
+    if (settlementType === "payment" && !["cash", "zelle", "venmo", "check", "card", "bank_transfer", "other"].includes(method)) throw new Error("Choose a payment method.");
+    if (f.get("charge_id")) {
+      const chargeResult = await client.from("ledger_entries").select("*").eq("id", f.get("charge_id")).maybeSingle();
+      if (chargeResult.error) throw chargeResult.error;
+      const charge = chargeResult.data;
+      if (!charge || charge.account_id !== account.id || charge.entry_type !== "charge" || charge.voided_at) throw new Error("The selected charge is no longer available. Reopen the form.");
+    }
     form.dataset.settlementId ||= crypto.randomUUID();
     const result = await client.rpc("record_account_settlement", {
       p_entry_id: form.dataset.settlementId,
@@ -263,7 +271,7 @@
       p_amount_cents: amount_cents,
       p_occurred_on: occurred_on,
       p_charge_id: f.get("charge_id") || null,
-      p_payment_method: settlementType === "payment" ? String(f.get("payment_method") || "") : null,
+      p_payment_method: settlementType === "payment" ? method : null,
       p_reference: String(f.get("reference") || "").trim() || null,
       p_notes: String(f.get("notes") || "").trim() || null,
       p_affects_pack_balance: settlementType === "payment" && f.has("affects_pack_balance")
