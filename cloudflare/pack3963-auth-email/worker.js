@@ -11,6 +11,7 @@ const DEFAULT_COPY = ACTIONS.magiclink;
 const MAX_BODY = 65536;
 const SKEW = 300;
 const RECEIPT_SYNC_PATH = "/api/treasurer/receipt-drive-sync";
+const INVOICE_SYNC_PATH = "/api/treasurer/invoice-drive-sync";
 
 export default {
   async fetch(request, env) {
@@ -28,8 +29,11 @@ export default {
       if (request.method === "POST") return handleReceiptDriveSync(request, env);
       return corsResponse(request, { error: "method_not_allowed" }, 405);
     }
-    if (request.method === "OPTIONS" && url.pathname === "/api/treasurer/send-email") return corsResponse(request, null, 204);
-    if (request.method === "POST" && url.pathname === "/api/treasurer/send-email") return handleTreasurerEmail(request, env);
+    if (url.pathname === INVOICE_SYNC_PATH) {
+      if (request.method === "OPTIONS") return corsResponse(request, null, 204);
+      if (request.method === "POST") return handleInvoiceDriveSync(request, env);
+      return corsResponse(request, { error: "method_not_allowed" }, 405);
+    }
     if (request.method !== "POST" || url.pathname !== "/hooks/supabase/send-email") {
       return Response.json({ error: "not_found" }, { status: 404 });
     }
@@ -196,14 +200,17 @@ async function handleReceiptDriveSync(request, env) {
     const receiptId = validUuid(payload?.receipt_id) ? payload.receipt_id : null;
     const expenseId = validUuid(payload?.expense_id) ? payload.expense_id : null;
     const syncPending = payload?.sync_pending === true;
-    if (!receiptId && !expenseId && !syncPending) return corsResponse(request, { error: "Choose a receipt, expense, or the pending queue." }, 400);
+    const reviewAll = payload?.review_all === true;
+    if (!receiptId && !expenseId && !syncPending && !reviewAll) return corsResponse(request, { error: "Choose a receipt, expense, the pending queue, or a full attachment review." }, 400);
 
     const filters = receiptId
-      ? "id=eq." + receiptId
+      ? "id=eq." + receiptId + "&"
       : expenseId
-        ? "expense_id=eq." + expenseId
-        : "drive_sync_status=in.(pending,error)";
-    const receipts = await sbFetch(env, actor.token, "expense_receipts?select=*&" + filters + "&order=created_at.asc&limit=25");
+        ? "expense_id=eq." + expenseId + "&"
+        : reviewAll
+          ? ""
+          : "drive_sync_status=in.(pending,error)&";
+    const receipts = await sbFetch(env, actor.token, "expense_receipts?select=*&" + filters + "order=created_at.asc&limit=100");
     if (!receipts.length) return corsResponse(request, { ok: true, synced: 0, failed: 0, results: [] });
 
     const accessToken = await googleAccessToken(env);
@@ -298,8 +305,8 @@ async function googleAccessToken(env) {
   return result.access_token;
 }
 
-async function findOrCreateDriveFolder(env, accessToken, folderName) {
-  const rootId = String(env.GOOGLE_DRIVE_ROOT_FOLDER_ID);
+async function findOrCreateDriveFolder(env, accessToken, folderName, parentId = env.GOOGLE_DRIVE_ROOT_FOLDER_ID) {
+  const rootId = String(parentId);
   const escapedName = folderName.replace(/'/g, "\\'");
   const q = `'${rootId}' in parents and name = '${escapedName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
   const search = await googleFetch("https://www.googleapis.com/drive/v3/files?spaces=drive&pageSize=10&fields=files(id,name)&q=" + encodeURIComponent(q), accessToken);
@@ -399,6 +406,137 @@ async function updateReceiptSync(env, token, receiptId, values) {
   });
 }
 
+
+async function handleInvoiceDriveSync(request, env) {
+  if (!allowedOrigin(request)) return corsResponse(request, { error: "origin_not_allowed" }, 403);
+  try {
+    const actor = await activeTreasuryUser(request, env);
+    if (actor.error) return corsResponse(request, { error: actor.error }, actor.status);
+    const payload = await request.json();
+    const invoiceIds = [...new Set(Array.isArray(payload?.invoice_ids) ? payload.invoice_ids : [])].filter(validUuid).slice(0, 50);
+    const syncPending = payload?.sync_pending === true;
+    if (!invoiceIds.length && !syncPending) return corsResponse(request, { error: "Choose one or more invoices or the pending invoice queue." }, 400);
+    const filter = invoiceIds.length
+      ? "id=in.(" + invoiceIds.join(",") + ")"
+      : "drive_sync_status=in.(pending,error)";
+    const invoices = await sbFetch(env, actor.token, "invoice_documents?select=*&" + filter + "&order=created_at.asc&limit=50");
+    if (!invoices.length) return corsResponse(request, { ok: true, synced: 0, failed: 0, results: [] });
+
+    const accessToken = await googleAccessToken(env);
+    const results = [];
+    for (const invoice of invoices) {
+      try {
+        const result = await syncInvoiceToDrive(env, actor.token, accessToken, invoice);
+        results.push({ invoice_id: invoice.id, ok: true, ...result });
+      } catch (error) {
+        const message = publicDriveError(error);
+        await updateInvoiceSync(env, actor.token, invoice.id, {
+          drive_sync_status: "error",
+          drive_sync_error: message,
+          drive_last_attempt_at: new Date().toISOString()
+        });
+        console.warn(JSON.stringify({ event: "invoice_drive_sync_failed", invoice_id: invoice.id, reason: message }));
+        results.push({ invoice_id: invoice.id, ok: false, error: message });
+      }
+    }
+    const synced = results.filter(item => item.ok).length;
+    const failed = results.length - synced;
+    return corsResponse(request, { ok: failed === 0, synced, failed, results }, failed === results.length ? 502 : 200);
+  } catch (error) {
+    const message = publicDriveError(error);
+    console.error(JSON.stringify({ event: "invoice_drive_sync_failed", reason: message }));
+    return corsResponse(request, { error: message }, 500);
+  }
+}
+
+async function syncInvoiceToDrive(env, token, accessToken, invoice) {
+  await updateInvoiceSync(env, token, invoice.id, {
+    drive_sync_status: "syncing",
+    drive_sync_error: null,
+    drive_last_attempt_at: new Date().toISOString()
+  });
+  const invoicesFolderId = await findOrCreateDriveFolder(env, accessToken, "Invoices");
+  const year = /^\d{4}/.test(String(invoice.invoice_date || "")) ? String(invoice.invoice_date).slice(0, 4) : "Undated";
+  const yearFolderId = await findOrCreateDriveFolder(env, accessToken, year, invoicesFolderId);
+  const filename = driveInvoiceFilename(invoice);
+  let driveFile;
+  if (invoice.drive_file_id) {
+    try {
+      driveFile = await updateDriveFile(accessToken, invoice.drive_file_id, filename, yearFolderId, invoice.drive_folder_id);
+    } catch (error) {
+      if (error.status !== 404) throw error;
+      driveFile = await uploadDriveDocument(accessToken, invoiceDocumentHtml(invoice), filename, yearFolderId);
+    }
+  } else {
+    driveFile = await uploadDriveDocument(accessToken, invoiceDocumentHtml(invoice), filename, yearFolderId);
+  }
+  const syncedAt = new Date().toISOString();
+  await updateInvoiceSync(env, token, invoice.id, {
+    drive_file_id: driveFile.id,
+    drive_folder_id: yearFolderId,
+    drive_filename: driveFile.name || filename,
+    drive_web_view_link: driveFile.webViewLink || null,
+    drive_sync_status: "synced",
+    drive_sync_error: null,
+    drive_last_attempt_at: syncedAt,
+    drive_synced_at: syncedAt
+  });
+  return { drive_file_id: driveFile.id, drive_filename: driveFile.name || filename, drive_web_view_link: driveFile.webViewLink || null, folder_name: "Invoices/" + year };
+}
+
+async function uploadDriveDocument(accessToken, html, filename, folderId) {
+  const boundary = "pack3963-" + crypto.randomUUID();
+  const metadata = { name: filename, mimeType: "application/vnd.google-apps.document", parents: [folderId] };
+  const body = [
+    "--" + boundary,
+    "Content-Type: application/json; charset=UTF-8",
+    "",
+    JSON.stringify(metadata),
+    "--" + boundary,
+    "Content-Type: text/html; charset=UTF-8",
+    "",
+    html,
+    "--" + boundary + "--"
+  ].join("\r\n");
+  return googleFetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,parents", accessToken, {
+    method: "POST",
+    headers: { "content-type": "multipart/related; boundary=" + boundary },
+    body
+  });
+}
+
+export function driveInvoiceFilename(invoice) {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(invoice.invoice_date || "")) ? invoice.invoice_date : "Undated";
+  const family = cleanDriveName(invoice.family_name || "Family");
+  const number = cleanDriveName(invoice.invoice_number || String(invoice.id || "").slice(0, 8));
+  return cleanDriveName(date + " - " + family + " - Invoice " + number);
+}
+
+export function invoiceDocumentHtml(invoice) {
+  const items = Array.isArray(invoice.line_items) ? invoice.line_items : [];
+  const scouts = Array.isArray(invoice.scout_names) ? invoice.scout_names : [];
+  const charges = items.filter(item => item.entry_type === "charge").reduce((sum, item) => sum + Number(item.amount_cents || 0), 0);
+  const credits = items.filter(item => item.entry_type !== "charge").reduce((sum, item) => sum + Number(item.amount_cents || 0), 0);
+  const rows = items.map(item => {
+    const signed = (item.entry_type === "charge" ? 1 : -1) * Number(item.amount_cents || 0);
+    return "<tr><td>" + esc(item.occurred_on || "") + "</td><td><strong>" + esc(item.description || "") + "</strong><br><small>" + (item.category ? esc(item.category) : "") + "</small></td><td>" + esc(item.account_name || "") + "</td><td style='text-align:right'>" + (signed < 0 ? "−" : "") + formatDriveMoney(Math.abs(signed)) + "</td></tr>";
+  }).join("");
+  const scoutLine = scouts.length ? scouts.map(scout => esc(scout.name) + (scout.den ? " — " + esc(scout.den) : "")).join(", ") : "";
+  return "<!doctype html><html><head><meta charset='utf-8'><style>body{font-family:Arial,sans-serif;color:#243447;max-width:760px;margin:28px auto}header{display:flex;gap:22px;padding:22px 0;border-top:10px solid #f7c600;border-bottom:3px solid #004b8d}header img{width:110px;height:auto}.brand h1{margin:0;color:#004b8d}.brand p{margin:3px 0;color:#607284}.details{margin-left:auto;text-align:right}.details strong{display:block;color:#004b8d;font-size:24px}.bill{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin:24px 0}.bill div:last-child{padding-left:18px;border-left:5px solid #f7c600}.label{color:#607284;font-size:11px;font-weight:bold;text-transform:uppercase}.message{padding:12px 14px;border-left:5px solid #004b8d;background:#f4f8fc}.balance{font-size:24px;color:#004b8d;font-weight:700}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{padding:10px;border-bottom:1px solid #d8e0e8;text-align:left}th{background:#eef3f8}.totals{width:330px;margin:20px 0 0 auto}.totals p{display:flex;justify-content:space-between}.totals .balance{padding-top:12px;border-top:4px solid #f7c600}.payment{margin-top:24px;padding:16px;border-left:6px solid #f7c600;background:#fff8d9}footer{margin-top:30px;padding-top:10px;border-top:2px solid #f7c600;color:#607284;font-size:12px}</style></head><body><header><img src='https://www.pack3963.com/assets/images/cubscoutlogo.png' alt='Pack 3963'><div class='brand'><h1>Cub Scout Pack 3963</h1><p>Pathway to Adventure Council • Scouting America</p><p>c/o Eden United Church of Christ</p><p>5051 W. Gunnison Street • Chicago, IL 60630</p><p>" + esc(invoice.support_email || "cubscouts3963@gmail.com") + " • pack3963.com</p></div><div class='details'><strong>INVOICE</strong><p># " + esc(invoice.invoice_number || "") + "</p><p>Issued: " + esc(invoice.invoice_date || "") + "</p><p>Due: " + esc(invoice.due_date || "") + "</p></div></header><section class='bill'><div><span class='label'>Bill to</span><h2>" + esc(invoice.bill_to || invoice.family_name || "Family account") + "</h2><p>" + esc(invoice.family_name || "") + "</p><p>" + scoutLine + "</p></div><div><span class='label'>Chartered organization</span><h2>Eden United Church of Christ</h2><p>5051 W. Gunnison Street<br>Chicago, IL 60630</p></div></section><p class='message'>" + esc(invoice.body_text || "").replace(/\n/g, "<br>") + "</p><table><thead><tr><th>Date</th><th>Description</th><th>Account</th><th style='text-align:right'>Amount</th></tr></thead><tbody>" + rows + "</tbody></table><section class='totals'><p><span>Charges</span><strong>" + formatDriveMoney(charges) + "</strong></p><p><span>Payments / credits</span><strong>−" + formatDriveMoney(credits) + "</strong></p><p class='balance'><span>Balance due</span><strong>" + formatDriveMoney(invoice.balance_cents) + "</strong></p></section><section class='payment'><strong>Payment instructions</strong><p>Pay with cash at a Pack meeting or send Zelle to " + esc(invoice.payment_instructions || "the Pack Treasurer") + " (Kevin Goldsmith, Pack Treasurer). Include the family name and invoice number in the memo.</p></section><footer>Cub Scout Pack 3963 • c/o Eden United Church of Christ • 5051 W. Gunnison Street, Chicago, IL 60630<br>Pathway to Adventure Council • Scouting America</footer></body></html>";
+}
+
+function formatDriveMoney(cents) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format((Number(cents) || 0) / 100);
+}
+
+async function updateInvoiceSync(env, token, invoiceId, values) {
+  await sbFetch(env, token, "invoice_documents?id=eq." + invoiceId, {
+    method: "PATCH",
+    headers: { prefer: "return=minimal" },
+    body: JSON.stringify(values)
+  });
+}
+
 function validUuid(value) {
   return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
@@ -429,9 +567,9 @@ function extensionForType(type) {
 }
 
 function publicDriveError(error) {
-  const message = String(error?.message || error || "Receipt synchronization failed.");
-  if (/authorization|configured|purchase date|expense|receipt|Google Drive|10 MB|Supabase/i.test(message)) return message.slice(0, 300);
-  return "Receipt synchronization failed. Try again or reconnect Google Drive.";
+  const message = String(error?.message || error || "Google Drive synchronization failed.");
+  if (/authorization|configured|purchase date|expense|receipt|invoice|Google Drive|10 MB|Supabase/i.test(message)) return message.slice(0, 300);
+  return "Google Drive synchronization failed. Try again or reconnect Google Drive.";
 }
 async function handleTreasurerEmail(request,env) {
   if(!allowedOrigin(request)) return corsResponse(request,{error:"origin_not_allowed"},403);

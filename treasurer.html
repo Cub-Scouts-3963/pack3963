@@ -150,7 +150,7 @@ styles:
           <label class="ledger-account-filter">Show activity for<select id="ledger-account-filter" aria-label="Filter ledger by family member"><option value="all">Entire family</option></select></label>
           <label class="check-row ledger-toggle"><input id="show-removed-ledger" type="checkbox"> Show removed entries</label>
           <button class="btn-secondary" type="button" id="export-ledger-csv">Export CSV</button>
-          <button class="btn-secondary" type="button" id="print-account-ledger">Print / Save PDF</button>
+          <button class="btn-secondary write-control" type="button" id="print-account-ledger">Create invoice / PDF</button>
           <button class="btn-secondary write-control" type="button" id="email-account-balance">Email balance details</button>
         </div>
         <form id="ledger-payment-form" class="portal-form" hidden>
@@ -179,9 +179,10 @@ styles:
             <div class="ledger-email-toolbar"><button class="btn-secondary" type="button" id="select-outstanding-ledger-items">Select outstanding charges</button><button class="text-button" type="button" id="select-all-ledger-items">Select all</button><button class="text-button" type="button" id="clear-ledger-items">Clear</button></div>
             <div id="ledger-email-items" class="ledger-email-options ledger-email-items"></div>
           </fieldset>
+          <label>Invoice due date<input name="due_date" type="date" required><small>If the selected charges have due dates, the latest one is used automatically. You may change it before sending.</small></label>
           <label>Subject<input name="subject" maxlength="180" required></label>
           <label>Message<textarea name="body_text" rows="6" maxlength="8000" required></textarea></label>
-          <div class="payment-note"><strong>Payment information included automatically</strong><span>The email will include the family’s current balance, the selected ledger items, Pack branding, and instructions to pay by cash or Zelle to Kevin.</span></div>
+          <div class="payment-note"><strong>Official invoice included automatically</strong><span>The email keeps the current Pack-branded format and adds a secure link to the numbered invoice, including the due date and cash or Zelle payment instructions.</span></div>
           <button class="btn-blue" type="submit" id="send-ledger-email">Send to selected contact(s)</button>
           <p id="ledger-email-status" class="form-status" role="status"></p>
         </form>
@@ -235,7 +236,7 @@ styles:
       <div class="filter-bar">
         <input id="expense-search" type="search" placeholder="Search vendor, category, purchaser, or notes">
         <select id="expense-filter"><option value="active">Active expenses</option><option value="reimbursement">Reimbursements</option><option value="unpaid">Awaiting reimbursement</option><option value="missing">Missing receipt</option><option value="voided">Removed / voided</option><option value="all">Everything</option></select>
-        <button class="btn-secondary write-control" type="button" id="sync-drive-receipts">Organize receipts in Google Drive</button>
+        <button class="btn-secondary write-control" type="button" id="sync-drive-receipts">Review receipts and invoices in Google Drive</button>
         <button class="btn-blue write-control" type="button" id="show-expense-form">Add expense</button>
       </div>
       <p id="drive-sync-status" class="form-status" role="status"></p>
