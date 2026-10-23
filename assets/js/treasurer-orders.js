@@ -87,9 +87,9 @@
   function renderFamilies(){
     const q=($("#email-family-search")?.value||"").toLowerCase();
     $("#email-family-options").innerHTML=householdAccounts().filter(a=>!q||a.display_name.toLowerCase().includes(q)).map(a=>{
-      const contacts=state.contacts.filter(c=>c.household_account_id===a.id&&c.email);
+      const contacts=state.contacts.filter(c=>c.household_account_id===a.id&&c.active!==false&&c.email);
       const has=contacts.length>0;
-      return `<label class="account-picker-option ${has?"":"is-disabled"}"><input type="checkbox" value="${a.id}" ${has?"":"disabled"}><span><strong>${esc(a.display_name)}</strong><small>${has?esc(contacts.map(c=>c.email).join(", ")):"No email on file"} · ${money(a.balance_cents)}</small></span></label>`;
+      return `<label class="account-picker-option ${has?"":"is-disabled"}"><input type="checkbox" value="${a.id}" ${has?"":"disabled"}><span><strong>${esc(a.display_name)}</strong><small>${has?esc(contacts.map(c=>`${c.full_name}: ${c.email}`).join(" · ")):"No email on file"} · ${money(a.balance_cents)}</small></span></label>`;
     }).join("");
     updateFamilyCount();
   }
