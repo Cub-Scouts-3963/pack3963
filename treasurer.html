@@ -54,6 +54,7 @@ styles:
       <button class="portal-tab" type="button" data-tab="import">Import</button>
       <button class="portal-tab write-control" type="button" data-tab="categories">Categories</button>
       <button class="portal-tab admin-only" type="button" data-tab="access">Access</button>
+      <button class="portal-tab admin-only" type="button" data-tab="audit">Audit log</button>
     </nav>
     <p id="app-status" class="form-status" role="status"></p>
 
@@ -119,6 +120,24 @@ styles:
           <button type="button" class="text-button" id="close-account-ledger">Close</button>
         </div>
         <p id="ledger-meta" class="ledger-meta"></p>
+        <div class="ledger-contact" id="ledger-contact">
+          <div><span>Family contact</span><strong id="ledger-contact-name">—</strong></div>
+          <div><span>Email address</span><strong id="ledger-contact-email">—</strong></div>
+          <button class="btn-secondary write-control" type="button" id="edit-ledger-contact">Edit contact</button>
+        </div>
+        <form id="ledger-contact-form" class="portal-form ledger-inline-form" hidden>
+          <input name="household_account_id" type="hidden">
+          <input name="contact_id" type="hidden">
+          <div class="form-grid">
+            <label>Parent or guardian name<input name="full_name" maxlength="160" required></label>
+            <label>Email address<input name="email" type="email" maxlength="320" required></label>
+          </div>
+          <div class="action-group">
+            <button class="btn-blue" type="submit">Save contact</button>
+            <button class="btn-secondary" type="button" id="cancel-ledger-contact">Cancel</button>
+          </div>
+          <p id="ledger-contact-status" class="form-status" role="status"></p>
+        </form>
         <div class="ledger-summary" aria-label="Ledger totals">
           <div><span>Charges</span><strong id="ledger-charges">$0.00</strong></div>
           <div><span>Payments and credits</span><strong id="ledger-payments">$0.00</strong></div>
@@ -129,6 +148,7 @@ styles:
           <label class="check-row ledger-toggle"><input id="show-removed-ledger" type="checkbox"> Show removed entries</label>
           <button class="btn-secondary" type="button" id="export-ledger-csv">Export CSV</button>
           <button class="btn-secondary" type="button" id="print-account-ledger">Print / Save PDF</button>
+          <button class="btn-secondary write-control" type="button" id="email-account-balance">Email balance details</button>
         </div>
         <form id="ledger-payment-form" class="portal-form" hidden>
           <div class="card-heading-row"><h3 id="ledger-settlement-heading">Record a payment or Pack assistance</h3><button class="text-button" type="button" id="close-ledger-payment">Cancel</button></div>
@@ -141,7 +161,8 @@ styles:
             <label id="ledger-payment-method-field">Payment method<select name="payment_method" required><option value="">Choose method</option><option value="cash">Cash</option><option value="zelle">Zelle</option><option value="venmo">Venmo</option><option value="check">Check</option><option value="card">Card</option><option value="bank_transfer">Bank transfer</option><option value="other">Other</option></select></label>
             <label>Reference<input name="reference" placeholder="Check number or transfer note"></label>
           </div>
-          <label class="check-row" id="ledger-balance-impact-field"><input name="affects_pack_balance" type="checkbox" checked> Add these received funds to the projected Pack balance</label>
+          <label class="check-row" id="ledger-balance-impact-field"><input name="affects_pack_balance" type="checkbox" checked> Add this payment to the Pack’s projected bank balance</label>
+          <p class="field-help" id="ledger-balance-impact-help">Select this when the Pack received actual money, such as cash, Zelle, or a check. Leave it unchecked for corrections, credits, or financial assistance.</p>
           <p class="field-help" id="ledger-assistance-help" hidden>Choose the fee being covered and add a note explaining the assistance. This clears the Scout or family balance without recording cash received.</p>
           <label>Notes<textarea name="notes" rows="2"></textarea></label>
           <button class="btn-blue" type="submit" id="save-ledger-settlement">Save payment</button>
@@ -172,7 +193,8 @@ styles:
           <label>Payment method<select name="payment_method"><option value="">Not applicable</option><option value="cash">Cash</option><option value="zelle">Zelle</option><option value="venmo">Venmo</option><option value="check">Check</option><option value="card">Card</option><option value="bank_transfer">Bank transfer</option><option value="other">Other</option></select></label>
           <label>Reference<input name="reference" placeholder="Check number or transfer note"></label>
         </div>
-        <label class="check-row" id="entry-balance-impact-field" hidden><input name="affects_pack_balance" type="checkbox"> Add received funds to the projected Pack balance</label>
+        <label class="check-row" id="entry-balance-impact-field" hidden><input name="affects_pack_balance" type="checkbox"> Add this payment to the Pack’s projected bank balance</label>
+        <p class="field-help" id="entry-balance-impact-help" hidden>Select this when the Pack received actual money, such as cash, Zelle, or a check. Leave it unchecked for corrections or credits.</p>
         <label>Description<input name="description" required placeholder="2026–27 Pack dues"></label>
         <div class="account-picker-field">
           <span class="field-label">Apply to one or more accounts</span>
@@ -199,7 +221,8 @@ styles:
         <button class="btn-blue write-control" type="button" id="show-expense-form">Add expense</button>
       </div>
       <form id="expense-form" class="card portal-form collapsible-form" hidden>
-        <div class="card-heading-row"><h3>Record Pack expense</h3><button type="button" class="text-button" data-close-form="expense-form">Close</button></div>
+        <input name="expense_id" type="hidden">
+        <div class="card-heading-row"><h3 id="expense-form-heading">Record Pack expense</h3><button type="button" class="text-button" data-close-form="expense-form">Close</button></div>
         <div class="form-grid">
           <label>Paid by<select name="expense_type" required><option value="pack_card">Pack card / Pack bank account</option><option value="reimbursement">A person who needs reimbursement</option></select></label>
           <label>Amount<input name="amount" type="number" min="0.01" step="0.01" required></label>
@@ -212,9 +235,10 @@ styles:
           <label>Receipt (PDF or image, 10 MB max)<input name="receipt" type="file" accept="image/jpeg,image/png,image/webp,application/pdf"></label>
         </div>
         <label class="check-row"><input name="affects_pack_balance" type="checkbox" checked> Deduct this expense from the projected Pack balance</label>
+        <p class="field-help" id="expense-balance-help">Pack-card and Pack-bank purchases are always deducted. Reimbursements are deducted when they are marked paid.</p>
         <label>Description<input name="description"></label>
         <label>Notes<textarea name="notes" rows="2"></textarea></label>
-        <button class="btn-blue" type="submit">Save expense</button>
+        <button class="btn-blue" type="submit" id="save-expense">Save expense</button>
       </form>
       <div class="table-wrap card"><table><thead><tr><th>Date</th><th>Vendor</th><th>Type / status</th><th>Paid by</th><th>Pack balance</th><th>Receipt</th><th class="money">Amount</th><th class="write-control">Action</th></tr></thead><tbody id="expenses-table"></tbody></table></div>
     </section>
@@ -358,6 +382,19 @@ styles:
         </form>
         <p class="form-status" id="access-status" role="status"></p>
         <div class="table-wrap"><table><thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>Invitation</th></tr></thead><tbody id="access-table"></tbody></table></div>
+      </article>
+    </section>
+
+    <section class="portal-panel admin-only" data-panel="audit">
+      <div class="filter-bar">
+        <input id="audit-search" type="search" placeholder="Search user, action, record, or details">
+        <select id="audit-table-filter" aria-label="Filter audit log by area"><option value="all">All areas</option></select>
+        <button class="btn-secondary" id="refresh-audit" type="button">Refresh audit log</button>
+      </div>
+      <article class="card">
+        <div class="card-heading-row"><div><p class="page-kicker">Administrators only</p><h3>System activity</h3></div><small id="audit-count"></small></div>
+        <p>Tracks who created, edited, removed, or restored financial records and administrative settings.</p>
+        <div class="table-wrap"><table><thead><tr><th>When</th><th>User</th><th>Area</th><th>Action</th><th>Record</th><th>Details</th></tr></thead><tbody id="audit-table"></tbody></table></div>
       </article>
     </section>
   </div>

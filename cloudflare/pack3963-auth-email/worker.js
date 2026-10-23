@@ -182,11 +182,16 @@ async function handleTreasurerEmail(request,env) {
       if(!hs.length){skipped++;continue}
       const cs=await sbFetch(env,token,"household_contacts?select=full_name,email,is_primary&household_account_id=eq."+hid+"&active=eq.true&email=not.is.null&order=is_primary.desc");
       const c=cs.find(x=>validEmail(x.email)); if(!c){skipped++;continue}
-      const bs=await sbFetch(env,token,"account_balances?select=id,balance_cents&or=(id.eq."+hid+",parent_account_id.eq."+hid+")");
+      const bs=await sbFetch(env,token,"account_balances?select=id,display_name,balance_cents&or=(id.eq."+hid+",parent_account_id.eq."+hid+")");
       const due=bs.reduce((n,x)=>n+Math.max(0,Number(x.balance_cents||0)),0);
+      const accountIds=bs.map(x=>x.id).filter(x=>/^[0-9a-f-]{36}$/i.test(x));
+      const accountNames=Object.fromEntries(bs.map(x=>[x.id,x.display_name]));
+      const activity=type==="invoice"&&accountIds.length
+        ?(await sbFetch(env,token,"ledger_entries?select=account_id,entry_type,amount_cents,occurred_on,description,category&voided_at=is.null&account_id=in.("+accountIds.join(",")+")&order=occurred_on.desc&limit=50")).map(x=>({...x,account_name:accountNames[x.account_id]||"Pack account"}))
+        :[];
       let provider=null,rs="failed",err=null;
       try {
-        const rr=await fetch("https://api.resend.com/emails",{method:"POST",headers:{authorization:"Bearer "+env.RESEND_API_KEY,"content-type":"application/json","idempotency-key":message.id+":"+hid},body:JSON.stringify({from:env.FROM_EMAIL,to:[c.email],subject,html:treasurerHtml(hs[0].display_name,subject,body,type==="invoice"?due:null,env.SUPPORT_EMAIL),text:treasurerText(hs[0].display_name,body,type==="invoice"?due:null,env.SUPPORT_EMAIL),reply_to:env.SUPPORT_EMAIL})});
+        const rr=await fetch("https://api.resend.com/emails",{method:"POST",headers:{authorization:"Bearer "+env.RESEND_API_KEY,"content-type":"application/json","idempotency-key":message.id+":"+hid},body:JSON.stringify({from:env.FROM_EMAIL,to:[c.email],subject,html:treasurerHtml(hs[0].display_name,subject,body,type==="invoice"?due:null,activity,env.SUPPORT_EMAIL),text:treasurerText(hs[0].display_name,body,type==="invoice"?due:null,activity,env.SUPPORT_EMAIL),reply_to:env.SUPPORT_EMAIL})});
         const rd=await rr.json(); if(!rr.ok) throw new Error(rd?.message||"Email provider rejected the message");
         provider=rd.id||null;rs="sent";sent++;
       } catch(e){err=String(e.message||e).slice(0,500);failed++}
@@ -198,12 +203,19 @@ async function handleTreasurerEmail(request,env) {
   } catch(e){console.error(JSON.stringify({event:"treasurer_email_failed",reason:String(e.message||e)}));return corsResponse(request,{error:String(e.message||"Unable to send email")},500)}
 }
 function fmtMoney(v){return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format((Number(v)||0)/100)}
-function treasurerHtml(family,subject,body,due,support){
+function activityAmount(entry){return (entry.entry_type==="charge"?1:-1)*Number(entry.amount_cents||0)}
+function treasurerActivityHtml(activity){
+  if(!activity?.length)return "";
+  const rows=activity.map(x=>"<tr><td style='padding:8px;border-bottom:1px solid #d8e0e8;font-size:13px'>"+esc(x.occurred_on)+"</td><td style='padding:8px;border-bottom:1px solid #d8e0e8;font-size:13px'><strong>"+esc(x.description)+"</strong><br><span style='color:#607284'>"+esc(x.account_name)+(x.category?" · "+esc(x.category):"")+"</span></td><td align='right' style='padding:8px;border-bottom:1px solid #d8e0e8;font-size:13px;font-weight:700;color:"+(activityAmount(x)>0?"#a1122f":"#24633f")+"'>"+(activityAmount(x)>0?"+":"−")+fmtMoney(Math.abs(activityAmount(x)))+"</td></tr>").join("");
+  return "<h2 style='color:#004b8d;font-size:19px;margin:24px 0 10px'>Recent account activity</h2><table role='presentation' width='100%' cellspacing='0' cellpadding='0' border='0'><tr><th align='left' style='padding:8px;background:#eef3f8;font-size:12px'>DATE</th><th align='left' style='padding:8px;background:#eef3f8;font-size:12px'>DETAIL</th><th align='right' style='padding:8px;background:#eef3f8;font-size:12px'>AMOUNT</th></tr>"+rows+"</table>";
+}
+function treasurerActivityText(activity){return activity?.length?"\n\nRECENT ACCOUNT ACTIVITY\n"+activity.map(x=>x.occurred_on+" | "+x.account_name+" | "+x.description+" | "+(activityAmount(x)>0?"+":"-")+fmtMoney(Math.abs(activityAmount(x)))).join("\n"):""}
+function treasurerHtml(family,subject,body,due,activity,support){
   const ps=String(body).split(/\n{2,}/).map(p=>"<p style='font-size:16px;line-height:1.6;margin:0 0 16px'>"+esc(p).replace(/\n/g,"<br>")+"</p>").join("");
   const bal=due==null?"":"<div style='margin:20px 0;padding:18px;background:#f4f8fc;border-left:5px solid #d71920;border-radius:7px'><div style='font-size:13px;font-weight:800;color:#526474'>CURRENT PACK BALANCE DUE</div><div style='font-size:30px;font-weight:800;color:#004b8d;margin-top:4px'>"+fmtMoney(due)+"</div></div>";
-  return "<!doctype html><html><body style='margin:0;background:#eef3f8;color:#243447;font-family:Arial,Helvetica,sans-serif'><table width='100%' role='presentation' style='padding:24px 12px'><tr><td align='center'><table width='100%' role='presentation' style='max-width:620px;background:#fff;border-radius:15px;overflow:hidden'><tr><td style='background:#004b8d;padding:26px 30px;border-bottom:8px solid #f7c600;color:#fff'><div style='font-size:25px;font-weight:800'>Cub Scout Pack 3963</div><div style='color:#d9ecff;margin-top:5px'>Pack Treasurer</div></td></tr><tr><td style='padding:30px'><div style='color:#d71920;font-size:12px;font-weight:800;letter-spacing:1px'>PACK ACCOUNT</div><h1 style='color:#004b8d;font-size:25px;margin:8px 0 18px'>"+esc(subject)+"</h1><p style='font-size:16px;line-height:1.6'>Hello "+esc(family)+",</p>"+ps+bal+"<p style='font-size:13px;color:#607284;margin-top:24px'>Questions? Reply or contact <a href='mailto:"+esc(support)+"'>"+esc(support)+"</a>.</p></td></tr><tr><td style='background:#003f75;color:#d9ecff;padding:17px 30px;font-size:12px'>Cub Scout Pack 3963 · Chicago, Illinois</td></tr></table></td></tr></table></body></html>"
+  return "<!doctype html><html><body style='margin:0;background:#eef3f8;color:#243447;font-family:Arial,Helvetica,sans-serif'><table width='100%' role='presentation' style='padding:24px 12px'><tr><td align='center'><table width='100%' role='presentation' style='max-width:620px;background:#fff;border-radius:15px;overflow:hidden'><tr><td style='background:#004b8d;padding:26px 30px;border-bottom:8px solid #f7c600;color:#fff'><div style='font-size:25px;font-weight:800'>Cub Scout Pack 3963</div><div style='color:#d9ecff;margin-top:5px'>Pack Treasurer</div></td></tr><tr><td style='padding:30px'><div style='color:#d71920;font-size:12px;font-weight:800;letter-spacing:1px'>PACK ACCOUNT</div><h1 style='color:#004b8d;font-size:25px;margin:8px 0 18px'>"+esc(subject)+"</h1><p style='font-size:16px;line-height:1.6'>Hello "+esc(family)+",</p>"+ps+bal+treasurerActivityHtml(activity)+"<p style='font-size:13px;color:#607284;margin-top:24px'>Questions? Reply or contact <a href='mailto:"+esc(support)+"'>"+esc(support)+"</a>.</p></td></tr><tr><td style='background:#003f75;color:#d9ecff;padding:17px 30px;font-size:12px'>Cub Scout Pack 3963 · Chicago, Illinois</td></tr></table></td></tr></table></body></html>"
 }
-function treasurerText(family,body,due,support){return "CUB SCOUT PACK 3963\n\nHello "+family+",\n\n"+body+(due==null?"":"\n\nCurrent Pack balance due: "+fmtMoney(due))+"\n\nQuestions? Contact "+support}
+function treasurerText(family,body,due,activity,support){return "CUB SCOUT PACK 3963\n\nHello "+family+",\n\n"+body+(due==null?"":"\n\nCurrent Pack balance due: "+fmtMoney(due))+treasurerActivityText(activity)+"\n\nQuestions? Contact "+support}
 
 function getDeliveries(event, action) {
   const user = event?.user || {};

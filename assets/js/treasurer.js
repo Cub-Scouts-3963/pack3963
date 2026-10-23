@@ -7,7 +7,7 @@
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: { persistSession: true, detectSessionInUrl: true, autoRefreshToken: true }
   });
-  const state = { user: null, access: null, accounts: [], entries: [], expenses: [], receipts: [], summary: null, users: [], householdContacts: [], importRows: [], rosterRows: [], rosterHouseholds: [], rosterFileName: "", activeLedgerId: null };
+  const state = { user: null, access: null, accounts: [], entries: [], expenses: [], receipts: [], summary: null, users: [], audit: [], householdContacts: [], importRows: [], rosterRows: [], rosterHouseholds: [], rosterFileName: "", activeLedgerId: null };
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => Array.from(document.querySelectorAll(selector));
   const today = () => new Date().toISOString().slice(0, 10);
@@ -76,7 +76,10 @@
         client.from("treasurer_summary").select("*").maybeSingle(),
         client.from("household_contacts").select("*").eq("active", true).order("is_primary", { ascending: false }).order("full_name")
       ];
-      if (state.access?.role === "admin") requests.push(client.from("authorized_users").select("*").order("email"));
+      if (state.access?.role === "admin") {
+        requests.push(client.from("authorized_users").select("*").order("email"));
+        requests.push(client.from("audit_log").select("*").order("changed_at", { ascending: false }).limit(1000));
+      }
       const results = await Promise.all(requests);
       state.accounts = checked(results[0].data, results[0].error) || [];
       state.entries = checked(results[1].data, results[1].error) || [];
@@ -85,6 +88,7 @@
       state.summary = checked(results[4].data, results[4].error) || {};
       state.householdContacts = checked(results[5].data, results[5].error) || [];
       state.users = results[6] ? checked(results[6].data, results[6].error) || [] : [];
+      state.audit = results[7] ? checked(results[7].data, results[7].error) || [] : [];
       renderAll();
       status(`Updated ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.`, "success");
     } catch (error) {
@@ -97,7 +101,7 @@
   }
 
   function renderAll() {
-    renderSummary(); renderAccounts(); renderTransactions(); renderExpenses(); renderAccess(); populateAccounts();
+    renderSummary(); renderAccounts(); renderTransactions(); renderExpenses(); renderAccess(); renderAudit(); populateAccounts();
   }
 
   function renderSummary() {
@@ -152,7 +156,7 @@
       const label = b > 0 ? "Due" : b < 0 ? "Credit" : "Paid / even";
       const family = a.account_type === "scout" ? state.accounts.find(x => x.id === a.parent_account_id) : a;
       const contacts = family ? state.householdContacts.filter(c => c.household_account_id === family.id) : [];
-      const contactText = contacts.length ? contacts.map(c => c.full_name).join(", ") : "—";
+      const contactText = contacts.length ? contacts.map(c => `${c.full_name}${c.email ? " · " + c.email : ""}`).join(", ") : (family?.contact_email || "—");
       const familyLine = a.account_type === "scout" && family ? `<br><small>${esc(family.display_name)}</small>` : (a.household_name ? `<br><small>${esc(a.household_name)}</small>` : "");
       const action = canWrite ? `<button class="action-button" data-account-active="${a.active ? "false" : "true"}" data-account-id="${a.id}" type="button">${a.active ? "Remove" : "Restore"}</button>` : "";
       return `<tr class="${a.active ? "" : "is-voided"}"><td><button class="ledger-link" data-view-ledger="${a.id}" type="button"><strong>${esc(a.display_name)}</strong></button>${familyLine}</td><td><small>${esc(contactText)}</small></td><td>${esc(a.den || "—")}</td><td>${esc(human(a.account_type))}</td><td class="money ${cls}">${money(Math.abs(b))}</td><td><span class="status-pill">${esc(a.active ? label : "Inactive")}</span></td><td><button class="action-button" data-view-ledger="${a.id}" type="button">View ledger</button></td><td class="write-control">${action}</td></tr>`;
@@ -177,6 +181,30 @@
     });
   }
 
+  function ledgerFamily(account) {
+    return account?.account_type === "scout"
+      ? state.accounts.find(a => a.id === account.parent_account_id) || null
+      : account?.account_type === "household" ? account : null;
+  }
+
+  function primaryFamilyContact(account) {
+    const family = ledgerFamily(account);
+    if (!family) return { family: null, contact: null };
+    const contacts = state.householdContacts.filter(c => c.household_account_id === family.id && c.active);
+    return { family, contact: contacts.find(c => c.is_primary) || contacts[0] || null };
+  }
+
+  function renderLedgerContact(account) {
+    const { family, contact } = primaryFamilyContact(account);
+    const email = contact?.email || family?.contact_email || account.contact_email || "";
+    $("#ledger-contact-name").textContent = contact?.full_name || (family ? family.display_name : account.display_name);
+    $("#ledger-contact-email").textContent = email || "No email on file";
+    $("#edit-ledger-contact").hidden = !family || !["admin", "treasurer"].includes(state.access?.role);
+    $("#email-account-balance").hidden = !family || !email || !["admin", "treasurer"].includes(state.access?.role);
+    $("#ledger-contact-form").hidden = true;
+    status("", "", "#ledger-contact-status");
+  }
+
   function renderAccountLedger(id) {
     const account = state.accounts.find(a => a.id === id);
     if (!account) return;
@@ -195,6 +223,7 @@
     $("#ledger-meta").textContent = account.account_type === "household"
       ? `Consolidated family ledger · ${scope.length - 1} linked Scout account${scope.length - 1 === 1 ? "" : "s"}`
       : `${human(account.account_type)}${account.den ? " · " + account.den : ""}`;
+    renderLedgerContact(account);
     $("#ledger-charges").textContent = money(charges);
     $("#ledger-payments").textContent = money(payments);
     $("#ledger-balance").textContent = money(balance);
@@ -202,6 +231,57 @@
     $("#ledger-table").innerHTML = rows.length ? rows.map(e => `<tr class="${e.voided_at ? "is-voided" : ""}"><td>${esc(e.occurred_on)}</td><td>${esc(accountName(e.account_id))}</td><td><strong>${esc(e.description)}</strong>${e.category ? `<br><small>${esc(e.category)}</small>` : ""}${e.affects_pack_balance ? '<br><small class="balance-credit">Included in Pack balance</small>' : ""}</td><td>${esc(human(e.entry_type))}</td><td class="money ${entryMoneyClass(e)}">${signedMoney(e)}</td><td class="money">${money(e.running_balance_cents)}</td><td>${e.voided_at ? "Removed" : "Posted"}</td></tr>`).join("") : emptyRow(7, "No ledger entries for this account.");
     $("#account-ledger").hidden = false;
     $("#account-ledger").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function openLedgerContactForm() {
+    const account = state.accounts.find(a => a.id === state.activeLedgerId);
+    const { family, contact } = primaryFamilyContact(account);
+    if (!family) throw new Error("This account is not linked to a family account.");
+    const form = $("#ledger-contact-form");
+    form.elements.household_account_id.value = family.id;
+    form.elements.contact_id.value = contact?.id || "";
+    form.elements.full_name.value = contact?.full_name || "";
+    form.elements.email.value = contact?.email || family.contact_email || account.contact_email || "";
+    form.hidden = false;
+    form.elements.full_name.focus();
+  }
+
+  async function saveLedgerContact(form) {
+    if (!["admin", "treasurer"].includes(state.access?.role)) throw new Error("Your role cannot edit family contacts.");
+    const f = new FormData(form), householdId = String(f.get("household_account_id") || "");
+    const family = state.accounts.find(a => a.id === householdId && a.account_type === "household");
+    if (!family) throw new Error("The linked family account could not be found.");
+    const fullName = String(f.get("full_name") || "").trim();
+    const email = String(f.get("email") || "").trim().toLowerCase();
+    if (!fullName || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter the parent or guardian name and a valid email address.");
+    let result;
+    if (f.get("contact_id")) {
+      result = await client.from("household_contacts").update({ full_name: fullName, email, is_primary: true, active: true }).eq("id", f.get("contact_id")).eq("household_account_id", householdId);
+    } else {
+      result = await client.from("household_contacts").insert({ household_account_id: householdId, full_name: fullName, email, relationship: "Parent / guardian", is_primary: true, active: true, source: "manual" });
+    }
+    if (result.error) throw result.error;
+    result = await client.from("financial_accounts").update({ contact_email: email }).eq("id", householdId);
+    if (result.error) throw result.error;
+    result = await client.from("financial_accounts").update({ contact_email: email }).eq("parent_account_id", householdId);
+    if (result.error) throw result.error;
+    form.hidden = true;
+    await loadAll();
+    if (state.activeLedgerId) renderAccountLedger(state.activeLedgerId);
+  }
+
+  function composeLedgerBalanceEmail() {
+    const account = state.accounts.find(a => a.id === state.activeLedgerId);
+    const { family, contact } = primaryFamilyContact(account);
+    if (!family || !(contact?.email || family.contact_email)) throw new Error("Add a family email address before sending balance details.");
+    openTab("communications");
+    const form = $("#email-form");
+    form.elements.message_type.value = "invoice";
+    form.elements.subject.value = `Pack 3963 balance details — ${family.display_name}`;
+    form.elements.body_text.value = "Here are the current balance details for your Pack 3963 account. The email includes your current balance and recent account activity.\n\nPlease reply if you have a question or believe a payment is missing.";
+    $$("#email-family-options input[type='checkbox']").forEach(input => { input.checked = input.value === family.id; });
+    $("#email-family-options").dispatchEvent(new Event("change", { bubbles: true }));
+    form.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function chargeRemaining(charge) {
@@ -217,6 +297,7 @@
     $("#ledger-payment-method-field").hidden = assistance;
     form.elements.payment_method.required = !assistance;
     $("#ledger-balance-impact-field").hidden = assistance;
+    $("#ledger-balance-impact-help").hidden = assistance;
     $("#ledger-assistance-help").hidden = !assistance;
     form.elements.notes.required = assistance;
     form.elements.charge_id.required = assistance;
@@ -357,7 +438,9 @@
     $("#expenses-table").innerHTML = rows.length ? rows.map(e => {
       const receipts = state.receipts.filter(r => r.expense_id === e.id);
       const receipt = receipts.length ? receipts.map(r => `<button class="text-button" type="button" data-open-receipt="${r.storage_path}">${esc(r.original_filename)}</button>`).join("<br>") : "Missing";
-      const action = canWrite ? (e.voided_at ? `<button class="action-button" data-restore-expense="${e.id}" type="button">Restore</button>` : `<button class="action-button" data-void-expense="${e.id}" type="button">Remove</button>`) : "";
+      const action = canWrite ? (e.voided_at
+        ? `<button class="action-button" data-restore-expense="${e.id}" type="button">Restore</button>`
+        : `<div class="action-group"><button class="action-button" data-edit-expense="${e.id}" type="button">Edit</button><button class="action-button" data-void-expense="${e.id}" type="button">Remove</button></div>`) : "";
       return `<tr class="${e.voided_at ? "is-voided" : ""}"><td>${esc(e.purchased_on)}</td><td><strong>${esc(e.vendor)}</strong>${e.category ? `<br><small>${esc(e.category)}</small>` : ""}</td><td>${esc(human(e.expense_type))}<br><span class="status-pill">${esc(human(e.status))}</span></td><td>${esc(e.expense_type === "reimbursement" ? e.reimburse_to : e.purchased_by || "Pack")}</td><td>${e.affects_pack_balance ? '<span class="status-pill">Deducted</span>' : "Not deducted"}</td><td>${receipt}</td><td class="money">${money(e.amount_cents)}</td><td class="write-control">${action}</td></tr>`;
     }).join("") : emptyRow(8, "No matching expenses.");
   }
@@ -365,6 +448,30 @@
   function renderAccess() {
     if (state.access?.role !== "admin") return;
     $("#access-table").innerHTML = state.users.length ? state.users.map(u => `<tr><td>${esc(u.email)}</td><td>${esc(u.display_name || "—")}</td><td>${esc(human(u.role))}</td><td>${u.active ? "Active" : "Disabled"}</td><td>${u.active ? `<button type="button" class="btn-secondary" data-invite-user="${esc(u.email)}">Resend invitation</button>` : "—"}</td></tr>`).join("") : emptyRow(5, "No authorized users.");
+  }
+
+  function auditDetails(item) {
+    const before = item.old_data || {}, after = item.new_data || {};
+    const ignored = new Set(["updated_at", "created_at", "created_by", "voided_by"]);
+    const fields = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter(key => !ignored.has(key) && JSON.stringify(before[key]) !== JSON.stringify(after[key]));
+    if (item.action === "INSERT") return fields.slice(0, 4).map(key => `${human(key)}: ${after[key] ?? "—"}`).join("; ") || "Record created";
+    if (item.action === "DELETE") return "Record deleted";
+    return fields.slice(0, 5).map(key => `${human(key)}: ${before[key] ?? "—"} → ${after[key] ?? "—"}`).join("; ") || "Record updated";
+  }
+
+  function renderAudit() {
+    if (state.access?.role !== "admin") return;
+    const filter = $("#audit-table-filter"), selected = filter.value || "all";
+    const tables = [...new Set(state.audit.map(item => item.table_name))].sort();
+    filter.innerHTML = '<option value="all">All areas</option>' + tables.map(name => `<option value="${esc(name)}">${esc(human(name))}</option>`).join("");
+    filter.value = tables.includes(selected) ? selected : "all";
+    const query = $("#audit-search").value.trim().toLowerCase();
+    const rows = state.audit.filter(item => {
+      const hay = [item.changed_by_email, item.table_name, item.action, item.record_id, auditDetails(item)].join(" ").toLowerCase();
+      return (filter.value === "all" || item.table_name === filter.value) && (!query || hay.includes(query));
+    });
+    $("#audit-count").textContent = `${rows.length} activit${rows.length === 1 ? "y" : "ies"}`;
+    $("#audit-table").innerHTML = rows.length ? rows.map(item => `<tr><td>${esc(new Date(item.changed_at).toLocaleString())}</td><td>${esc(item.changed_by_email || "System")}</td><td>${esc(human(item.table_name))}</td><td><span class="status-pill">${esc(human(item.action))}</span></td><td><small>${esc(item.record_id || "—")}</small></td><td class="audit-details">${esc(auditDetails(item))}</td></tr>`).join("") : emptyRow(6, "No matching activity.");
   }
 
   async function sendUserInvitation(email, requestId) {
@@ -468,14 +575,20 @@
 
   async function saveExpense(form) {
     const f = new FormData(form);
+    const expenseId = String(f.get("expense_id") || "");
+    const expenseType = String(f.get("expense_type") || "");
+    const expenseStatus = String(f.get("status") || "");
     const row = {
-      expense_type: f.get("expense_type"), amount_cents: cents(f.get("amount")), purchased_on: f.get("purchased_on"),
+      expense_type: expenseType, amount_cents: cents(f.get("amount")), purchased_on: f.get("purchased_on"),
       vendor: String(f.get("vendor")).trim(), category: String(f.get("category") || "").trim() || null,
       purchased_by: String(f.get("purchased_by") || "").trim() || null, reimburse_to: String(f.get("reimburse_to") || "").trim() || null,
-      status: f.get("status"), description: String(f.get("description") || "").trim() || null, notes: String(f.get("notes") || "").trim() || null,
-      affects_pack_balance: f.has("affects_pack_balance")
+      status: expenseStatus, description: String(f.get("description") || "").trim() || null, notes: String(f.get("notes") || "").trim() || null,
+      affects_pack_balance: expenseType === "pack_card" || (expenseType === "reimbursement" && expenseStatus === "paid" && f.has("affects_pack_balance"))
     };
-    const { data, error } = await client.from("expenses").insert(row).select().single(); if (error) throw error;
+    const savedExpense = expenseId
+      ? await client.from("expenses").update(row).eq("id", expenseId).is("voided_at", null).select().single()
+      : await client.from("expenses").insert(row).select().single();
+    const { data, error } = savedExpense; if (error) throw error;
     const file = f.get("receipt");
     if (file && file.size) {
       if (file.size > 10485760) throw new Error("Expense saved, but the receipt is larger than 10 MB.");
@@ -486,6 +599,43 @@
       const saved = await client.from("expense_receipts").insert({ expense_id: data.id, storage_path: path, original_filename: file.name, content_type: file.type || null, size_bytes: file.size });
       if (saved.error) throw saved.error;
     }
+    delete form.dataset.editing;
+  }
+
+  function syncExpenseBalanceControl() {
+    const form = $("#expense-form"), type = form.elements.expense_type.value, paid = form.elements.status.value === "paid";
+    const checkbox = form.elements.affects_pack_balance;
+    if (type === "pack_card") { checkbox.checked = true; checkbox.disabled = true; }
+    else { checkbox.disabled = !paid; checkbox.checked = paid; }
+    $("#expense-balance-help").textContent = type === "pack_card"
+      ? "Pack-card and Pack-bank purchases are automatically deducted from the projected balance."
+      : paid ? "This paid reimbursement will be deducted from the projected balance." : "This reimbursement will not affect the projected balance until its status is Paid.";
+  }
+
+  function openNewExpense() {
+    const form = $("#expense-form");
+    form.reset(); form.elements.expense_id.value = ""; delete form.dataset.editing;
+    $("#expense-form-heading").textContent = "Record Pack expense";
+    $("#save-expense").textContent = "Save expense";
+    setDefaults(); syncExpenseBalanceControl();
+    form.hidden = false; form.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function editExpense(id) {
+    const expense = state.expenses.find(item => item.id === id && !item.voided_at);
+    if (!expense) throw new Error("The expense could not be found.");
+    const form = $("#expense-form");
+    form.reset(); form.dataset.editing = "true";
+    for (const key of ["expense_type", "purchased_on", "vendor", "category", "purchased_by", "reimburse_to", "status", "description", "notes"]) {
+      if (form.elements[key]) form.elements[key].value = expense[key] || "";
+    }
+    form.elements.expense_id.value = expense.id;
+    form.elements.amount.value = (Number(expense.amount_cents) / 100).toFixed(2);
+    form.elements.affects_pack_balance.checked = Boolean(expense.affects_pack_balance);
+    $("#expense-form-heading").textContent = "Edit Pack expense";
+    $("#save-expense").textContent = "Save corrections";
+    syncExpenseBalanceControl();
+    form.hidden = false; form.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   async function voidRecord(table, id, restore = false) {
@@ -737,7 +887,8 @@
     $("#refresh-data").addEventListener("click", loadAll);
     $$(".portal-tab").forEach(b => b.addEventListener("click", () => openTab(b.dataset.tab)));
     $$("[data-go-tab]").forEach(b => b.addEventListener("click", () => openTab(b.dataset.goTab)));
-    [["#show-account-form","#account-form"],["#show-entry-form","#entry-form"],["#show-expense-form","#expense-form"],["#show-bank-form","#bank-form"]].forEach(([button, form]) => $(button).addEventListener("click", () => { $(form).hidden = false; $(form).scrollIntoView({ behavior: "smooth", block: "start" }); }));
+    [["#show-account-form","#account-form"],["#show-entry-form","#entry-form"],["#show-bank-form","#bank-form"]].forEach(([button, form]) => $(button).addEventListener("click", () => { $(form).hidden = false; $(form).scrollIntoView({ behavior: "smooth", block: "start" }); }));
+    $("#show-expense-form").addEventListener("click", openNewExpense);
     $$("[data-close-form]").forEach(b => b.addEventListener("click", () => { $("#" + b.dataset.closeForm).hidden = true; }));
     $("#account-search").addEventListener("input", renderAccounts); $("#account-type-filter").addEventListener("change", renderAccounts); $("#balance-filter").addEventListener("change", renderAccounts);
     $("#entry-account-search").addEventListener("input", filterAccountPicker);
@@ -751,8 +902,16 @@
       updateAccountPickerCount();
     });
     $("#transaction-search").addEventListener("input", renderTransactions); $("#transaction-filter").addEventListener("change", renderTransactions);
-    $("#entry-form [name='entry_type']").addEventListener("change", e => { $("#entry-balance-impact-field").hidden = e.target.value !== "payment"; });
+    $("#entry-form [name='entry_type']").addEventListener("change", e => {
+      const hidden = e.target.value !== "payment";
+      $("#entry-balance-impact-field").hidden = hidden;
+      $("#entry-balance-impact-help").hidden = hidden;
+    });
     $("#expense-search").addEventListener("input", renderExpenses); $("#expense-filter").addEventListener("change", renderExpenses);
+    $("#expense-form [name='expense_type']").addEventListener("change", syncExpenseBalanceControl);
+    $("#expense-form [name='status']").addEventListener("change", syncExpenseBalanceControl);
+    $("#audit-search").addEventListener("input", renderAudit); $("#audit-table-filter").addEventListener("change", renderAudit);
+    $("#refresh-audit").addEventListener("click", loadAll);
     $("#account-form").addEventListener("submit", e => { e.preventDefault(); submitHandler(e.currentTarget, saveAccount, "Account added."); });
     $("#entry-form").addEventListener("submit", e => { e.preventDefault(); submitHandler(e.currentTarget, saveEntry, "Charge or payment saved."); });
     $("#expense-form").addEventListener("submit", e => { e.preventDefault(); submitHandler(e.currentTarget, saveExpense, "Expense saved."); });
@@ -782,6 +941,16 @@
       catch (error) { status(error.message || "Unable to update the account.", "error"); }
     });
     $("#close-account-ledger").addEventListener("click", () => { $("#account-ledger").hidden = true; state.activeLedgerId = null; });
+    $("#edit-ledger-contact").addEventListener("click", () => { try { openLedgerContactForm(); } catch (error) { status(error.message, "error"); } });
+    $("#cancel-ledger-contact").addEventListener("click", () => { $("#ledger-contact-form").hidden = true; });
+    $("#ledger-contact-form").addEventListener("submit", async e => {
+      e.preventDefault(); const button = e.currentTarget.querySelector("button[type=submit]"); button.disabled = true;
+      status("Saving contact…", "", "#ledger-contact-status");
+      try { await saveLedgerContact(e.currentTarget); status("Contact updated.", "success"); }
+      catch (error) { status(error.message || "Unable to save the contact.", "error", "#ledger-contact-status"); }
+      finally { button.disabled = false; }
+    });
+    $("#email-account-balance").addEventListener("click", () => { try { composeLedgerBalanceEmail(); } catch (error) { status(error.message, "error"); } });
     $("#show-removed-ledger").addEventListener("change", () => { if (state.activeLedgerId) renderAccountLedger(state.activeLedgerId); });
     $("#export-ledger-csv").addEventListener("click", exportAccountLedger);
     $("#show-ledger-payment").addEventListener("click", openLedgerPayment);
@@ -803,6 +972,7 @@
     $("#expenses-table").addEventListener("click", async e => {
       const b = e.target.closest("button"); if (!b) return;
       try {
+        if (b.dataset.editExpense) { editExpense(b.dataset.editExpense); return; }
         if (b.dataset.voidExpense) await voidRecord("expenses", b.dataset.voidExpense);
         if (b.dataset.restoreExpense) await voidRecord("expenses", b.dataset.restoreExpense, true);
         if (b.dataset.openReceipt) { const { data, error } = await client.storage.from("pack-receipts").createSignedUrl(b.dataset.openReceipt, 60); if (error) throw error; window.open(data.signedUrl, "_blank", "noopener"); }
