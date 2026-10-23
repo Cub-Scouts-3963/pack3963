@@ -34,6 +34,9 @@ create index if not exists invoice_documents_drive_sync_queue_idx
   on public.invoice_documents (drive_sync_status, created_at)
   where drive_sync_status in ('pending', 'error');
 
+create index if not exists invoice_documents_household_idx
+  on public.invoice_documents (household_account_id);
+
 alter table public.invoice_documents enable row level security;
 
 drop policy if exists invoice_documents_read on public.invoice_documents;
@@ -41,9 +44,14 @@ create policy invoice_documents_read on public.invoice_documents
   for select to authenticated
   using (private.is_authorized());
 
-drop policy if exists invoice_documents_write on public.invoice_documents;
-create policy invoice_documents_write on public.invoice_documents
-  for all to authenticated
+drop policy if exists invoice_documents_insert on public.invoice_documents;
+create policy invoice_documents_insert on public.invoice_documents
+  for insert to authenticated
+  with check (private.can_write());
+
+drop policy if exists invoice_documents_update on public.invoice_documents;
+create policy invoice_documents_update on public.invoice_documents
+  for update to authenticated
   using (private.can_write())
   with check (private.can_write());
 
