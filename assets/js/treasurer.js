@@ -118,15 +118,16 @@
     $("#summary-due").textContent = money(s.total_due_cents);
     $("#summary-credits").textContent = money(s.total_credit_cents);
     $("#summary-expenses").textContent = money(s.total_expenses_cents);
-    const due = state.accounts.filter(a => Number(a.amount_due_cents) > 0).length;
-    const credits = state.accounts.filter(a => Number(a.credit_cents) > 0).length;
-    $("#summary-due-count").textContent = `${due} account${due === 1 ? "" : "s"} with a balance`;
-    $("#summary-credit-count").textContent = `${credits} account${credits === 1 ? "" : "s"} with credit`;
+    const familyBalances = familyGroups().filter(group => group.active);
+    const due = familyBalances.filter(group => group.balance_cents > 0).length;
+    const credits = familyBalances.filter(group => group.balance_cents < 0).length;
+    $("#summary-due-count").textContent = `${due} famil${due === 1 ? "y" : "ies"} with a balance`;
+    $("#summary-credit-count").textContent = `${credits} famil${credits === 1 ? "y" : "ies"} with credit`;
     $("#summary-reimbursements").textContent = `${money(s.reimbursements_due_cents)} awaiting reimbursement`;
     const missing = state.expenses.filter(e => !e.voided_at && !state.receipts.some(r => r.expense_id === e.id)).length;
     const unpaid = state.expenses.filter(e => !e.voided_at && e.expense_type === "reimbursement" && e.status !== "paid").length;
     const priorities = [
-      `${due} Scout/family account${due === 1 ? "" : "s"} currently owe money.`,
+      `${due} famil${due === 1 ? "y" : "ies"} currently ${due === 1 ? "has" : "have"} a balance due.`,
       `${unpaid} reimbursement${unpaid === 1 ? "" : "s"} still need payment.`,
       `${missing} expense${missing === 1 ? "" : "s"} do not have a receipt attached.`
     ];
@@ -135,33 +136,63 @@
     $("#recent-activity").innerHTML = recent.length ? recent.map(e => `<tr><td>${esc(e.occurred_on)}</td><td>${esc(accountName(e.account_id))}</td><td>${esc(human(e.entry_type))}</td><td>${esc(e.description)}</td><td class="money ${entryMoneyClass(e)}">${signedMoney(e)}</td></tr>`).join("") : emptyRow(5, "No activity recorded yet.");
   }
 
+  function familyGroups() {
+    const households = state.accounts.filter(account => account.account_type === "household");
+    const linkedIds = new Set();
+    const groups = households.map(family => {
+      const scouts = state.accounts.filter(account => account.account_type === "scout" && account.parent_account_id === family.id);
+      const members = [family, ...scouts];
+      members.forEach(member => linkedIds.add(member.id));
+      return {
+        family, scouts, members,
+        contacts: state.householdContacts.filter(contact => contact.household_account_id === family.id && contact.active),
+        balance_cents: members.reduce((sum, member) => sum + Number(member.balance_cents || 0), 0),
+        active: Boolean(family.active)
+      };
+    });
+    state.accounts.filter(account => !linkedIds.has(account.id)).forEach(account => {
+      groups.push({
+        family: account,
+        scouts: account.account_type === "scout" ? [account] : [],
+        members: [account],
+        contacts: [],
+        balance_cents: Number(account.balance_cents || 0),
+        active: Boolean(account.active),
+        unlinked: true
+      });
+    });
+    return groups;
+  }
+
   function filteredAccounts() {
     const q = $("#account-search").value.trim().toLowerCase();
     const statusFilter = $("#balance-filter").value;
-    const typeFilter = $("#account-type-filter").value;
-    return state.accounts.filter(a => {
-      const hay = [a.display_name, a.den, a.household_name, a.bsa_member_id, a.scoutbook_user_id].join(" ").toLowerCase();
-      const b = Number(a.balance_cents);
-      const statusMatch = statusFilter === "current" ? a.active : statusFilter === "due" ? b > 0 && a.active : statusFilter === "credit" ? b < 0 && a.active : statusFilter === "paid" ? b === 0 && a.active : statusFilter === "inactive" ? !a.active : true;
-      const typeMatch = typeFilter === "all" || a.account_type === typeFilter;
-      return (!q || hay.includes(q)) && statusMatch && typeMatch;
+    return familyGroups().filter(group => {
+      const searchableAccounts = group.members.flatMap(account => [account.display_name, account.den, account.household_name, account.bsa_member_id, account.scoutbook_user_id]);
+      const searchableContacts = group.contacts.flatMap(contact => [contact.full_name, contact.email, contact.phone]);
+      const hay = [...searchableAccounts, ...searchableContacts].filter(Boolean).join(" ").toLowerCase();
+      const b = group.balance_cents;
+      const statusMatch = statusFilter === "current" ? group.active : statusFilter === "due" ? b > 0 && group.active : statusFilter === "credit" ? b < 0 && group.active : statusFilter === "paid" ? b === 0 && group.active : statusFilter === "inactive" ? !group.active : true;
+      return (!q || hay.includes(q)) && statusMatch;
     });
   }
 
   function renderAccounts() {
     const canWrite = ["admin", "treasurer"].includes(state.access?.role);
     const rows = filteredAccounts();
-    $("#accounts-table").innerHTML = rows.length ? rows.map(a => {
-      const b = Number(a.balance_cents);
+    $("#accounts-table").innerHTML = rows.length ? rows.map(group => {
+      const a = group.family;
+      const b = group.balance_cents;
       const cls = b > 0 ? "balance-due" : b < 0 ? "balance-credit" : "";
       const label = b > 0 ? "Due" : b < 0 ? "Credit" : "Paid / even";
-      const family = a.account_type === "scout" ? state.accounts.find(x => x.id === a.parent_account_id) : a;
-      const contacts = family ? state.householdContacts.filter(c => c.household_account_id === family.id) : [];
-      const contactText = contacts.length ? contacts.map(c => `${c.full_name}${c.email ? " · " + c.email : ""}`).join(", ") : (family?.contact_email || "—");
-      const familyLine = a.account_type === "scout" && family ? `<br><small>${esc(family.display_name)}</small>` : (a.household_name ? `<br><small>${esc(a.household_name)}</small>` : "");
+      const primary = group.contacts.find(contact => contact.is_primary) || group.contacts[0];
+      const contactNames = group.contacts.length ? group.contacts.map(contact => contact.full_name).join(", ") : "No contacts listed";
+      const contactEmail = primary?.email || a.contact_email || "No email on file";
+      const scoutList = group.scouts.length ? group.scouts.map(scout => `<span class="family-scout"><strong>${esc(scout.display_name)}</strong>${scout.den ? `<small>${esc(scout.den)}</small>` : ""}</span>`).join("") : '<span class="family-scout"><small>No Scouts linked</small></span>';
       const action = canWrite ? `<button class="action-button" data-account-active="${a.active ? "false" : "true"}" data-account-id="${a.id}" type="button">${a.active ? "Remove" : "Restore"}</button>` : "";
-      return `<tr class="${a.active ? "" : "is-voided"}"><td><button class="ledger-link" data-view-ledger="${a.id}" type="button"><strong>${esc(a.display_name)}</strong></button>${familyLine}</td><td><small>${esc(contactText)}</small></td><td>${esc(a.den || "—")}</td><td>${esc(human(a.account_type))}</td><td class="money ${cls}">${money(Math.abs(b))}</td><td><span class="status-pill">${esc(a.active ? label : "Inactive")}</span></td><td><button class="action-button" data-view-ledger="${a.id}" type="button">View ledger</button></td><td class="write-control">${action}</td></tr>`;
-    }).join("") : emptyRow(8, "No matching accounts.");
+      const note = group.unlinked ? '<br><small class="balance-due">Needs a family link</small>' : "";
+      return `<tr class="${a.active ? "" : "is-voided"}"><td><button class="ledger-link" data-view-ledger="${a.id}" type="button"><strong>${esc(a.display_name)}</strong></button>${note}</td><td><div class="family-scout-list">${scoutList}</div></td><td><strong>${esc(contactNames)}</strong><br><small>${esc(contactEmail)}</small></td><td class="money ${cls}">${money(Math.abs(b))}</td><td><span class="status-pill">${esc(a.active ? label : "Inactive")}</span></td><td><div class="family-row-actions"><button class="action-button" data-view-ledger="${a.id}" type="button">View family ledger</button>${action}</div></td></tr>`;
+    }).join("") : emptyRow(6, "No matching families.");
   }
 
 
@@ -215,21 +246,32 @@
     paymentForm.dataset.accountId = id;
     $("#show-ledger-payment").hidden = !account.active || !["admin", "treasurer"].includes(state.access?.role);
     const scope = ledgerScope(account);
-    const rows = ledgerRows(account, $("#show-removed-ledger")?.checked);
-    const activeRows = rows.filter(e => !e.voided_at);
+    const allRows = ledgerRows(account, $("#show-removed-ledger")?.checked);
+    const accountFilter = $("#ledger-account-filter");
+    const priorFilter = accountFilter.value || "all";
+    accountFilter.innerHTML = '<option value="all">Entire family</option>' + scope.map(member => `<option value="${member.id}">${esc(member.account_type === "household" ? "Family-level charges" : member.display_name)}</option>`).join("");
+    accountFilter.value = scope.some(member => member.id === priorFilter) ? priorFilter : "all";
+    const rows = accountFilter.value === "all" ? allRows : allRows.filter(entry => entry.account_id === accountFilter.value);
+    const activeRows = allRows.filter(e => !e.voided_at);
     const charges = activeRows.filter(e => e.entry_type === "charge").reduce((sum, e) => sum + Number(e.amount_cents), 0);
     const payments = activeRows.filter(e => e.entry_type !== "charge").reduce((sum, e) => sum + Number(e.amount_cents), 0);
     const balance = scope.reduce((sum, a) => sum + Number(a.balance_cents || 0), 0);
     $("#ledger-title").textContent = account.display_name;
     $("#ledger-meta").textContent = account.account_type === "household"
-      ? `Consolidated family ledger · ${scope.length - 1} linked Scout account${scope.length - 1 === 1 ? "" : "s"}`
+      ? `${scope.length - 1} Scout${scope.length - 1 === 1 ? "" : "s"} · one consolidated balance for the family`
       : `${human(account.account_type)}${account.den ? " · " + account.den : ""}`;
     renderLedgerContact(account);
+    $("#ledger-members").innerHTML = scope.map(member => {
+      const memberBalance = Number(member.balance_cents || 0);
+      const memberClass = memberBalance > 0 ? "balance-due" : memberBalance < 0 ? "balance-credit" : "";
+      const memberLabel = member.account_type === "household" ? "Family-level charges" : [member.display_name, member.den].filter(Boolean).join(" · ");
+      return `<button type="button" class="family-member-balance${accountFilter.value === member.id ? " is-selected" : ""}" data-ledger-member="${member.id}"><span>${esc(memberLabel)}</span><strong class="${memberClass}">${money(Math.abs(memberBalance))}</strong><small>${memberBalance > 0 ? "Due" : memberBalance < 0 ? "Credit" : "Paid / even"}</small></button>`;
+    }).join("");
     $("#ledger-charges").textContent = money(charges);
     $("#ledger-payments").textContent = money(payments);
     $("#ledger-balance").textContent = money(balance);
     $("#ledger-balance").className = balance > 0 ? "balance-due" : balance < 0 ? "balance-credit" : "";
-    $("#ledger-table").innerHTML = rows.length ? rows.map(e => `<tr class="${e.voided_at ? "is-voided" : ""}"><td>${esc(e.occurred_on)}</td><td>${esc(accountName(e.account_id))}</td><td><strong>${esc(e.description)}</strong>${e.category ? `<br><small>${esc(e.category)}</small>` : ""}${e.affects_pack_balance ? '<br><small class="balance-credit">Included in Pack balance</small>' : ""}</td><td>${esc(human(e.entry_type))}</td><td class="money ${entryMoneyClass(e)}">${signedMoney(e)}</td><td class="money">${money(e.running_balance_cents)}</td><td>${e.voided_at ? "Removed" : "Posted"}</td></tr>`).join("") : emptyRow(7, "No ledger entries for this account.");
+    $("#ledger-table").innerHTML = rows.length ? rows.map(e => `<tr class="${e.voided_at ? "is-voided" : ""}"><td>${esc(e.occurred_on)}</td><td>${esc(accountName(e.account_id))}</td><td><strong>${esc(e.description)}</strong>${e.category ? `<br><small>${esc(e.category)}</small>` : ""}${e.affects_pack_balance ? '<br><small class="balance-credit">Included in Pack balance</small>' : ""}</td><td>${esc(human(e.entry_type))}</td><td class="money ${entryMoneyClass(e)}">${signedMoney(e)}</td><td class="money">${money(e.running_balance_cents)}</td><td>${e.voided_at ? "Removed" : "Posted"}</td></tr>`).join("") : emptyRow(7, "No matching ledger entries for this family.");
     $("#account-ledger").hidden = false;
     $("#account-ledger").scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -316,11 +358,12 @@
     const form = $("#ledger-payment-form"); form.reset(); form.dataset.accountId = account.id; delete form.dataset.settlementId;
     form.elements.occurred_on.value = today();
     form.elements.affects_pack_balance.checked = true;
-    $("#ledger-payment-account").textContent = `Record money received from ${account.display_name}, or document a fee the Pack is covering. Family payments for another Scout must be recorded in that Scout's ledger.`;
-    const charges = state.entries.filter(entry => entry.account_id === account.id && entry.entry_type === "charge" && !entry.voided_at)
+    $("#ledger-payment-account").textContent = `Record money received from ${account.display_name}. Apply it to a specific family or Scout charge, or leave it as a general family payment.`;
+    const scopeIds = new Set(ledgerScope(account).map(member => member.id));
+    const charges = state.entries.filter(entry => scopeIds.has(entry.account_id) && entry.entry_type === "charge" && !entry.voided_at)
       .map(charge => ({ charge, remaining: chargeRemaining(charge) })).filter(item => item.remaining > 0);
-    $("#ledger-payment-charge").innerHTML = '<option value="">General account payment</option>' + charges.map(({ charge, remaining }) =>
-      `<option value="${esc(charge.id)}" data-remaining="${remaining}">${esc(charge.description)} — ${money(remaining)} remaining</option>`).join("");
+    $("#ledger-payment-charge").innerHTML = '<option value="">General family payment</option>' + charges.map(({ charge, remaining }) =>
+      `<option value="${esc(charge.id)}" data-remaining="${remaining}">${esc(accountName(charge.account_id))}: ${esc(charge.description)} — ${money(remaining)} remaining</option>`).join("");
     syncLedgerSettlementForm();
     status("", "", "#ledger-payment-status"); form.hidden = false;
   }
@@ -339,16 +382,19 @@
     if (settlementType === "assistance" && !String(f.get("notes") || "").trim()) throw new Error("Add a note explaining the financial assistance.");
     const method = String(f.get("payment_method") || "");
     if (settlementType === "payment" && !["cash", "zelle", "venmo", "check", "card", "bank_transfer", "other"].includes(method)) throw new Error("Choose a payment method.");
+    let targetAccount = account;
     if (f.get("charge_id")) {
       const chargeResult = await client.from("ledger_entries").select("*").eq("id", f.get("charge_id")).maybeSingle();
       if (chargeResult.error) throw chargeResult.error;
       const charge = chargeResult.data;
-      if (!charge || charge.account_id !== account.id || charge.entry_type !== "charge" || charge.voided_at) throw new Error("The selected charge is no longer available. Reopen the form.");
+      const scopeIds = new Set(ledgerScope(account).map(member => member.id));
+      if (!charge || !scopeIds.has(charge.account_id) || charge.entry_type !== "charge" || charge.voided_at) throw new Error("The selected charge is no longer available. Reopen the form.");
+      targetAccount = state.accounts.find(member => member.id === charge.account_id) || account;
     }
     form.dataset.settlementId ||= crypto.randomUUID();
     const result = await client.rpc("record_account_settlement", {
       p_entry_id: form.dataset.settlementId,
-      p_account_id: account.id,
+      p_account_id: targetAccount.id,
       p_entry_type: settlementType,
       p_amount_cents: amount_cents,
       p_occurred_on: occurred_on,
@@ -944,7 +990,7 @@
     $("#show-expense-form").addEventListener("click", openNewExpense);
     $("#sync-drive-receipts").addEventListener("click", syncPendingDriveReceipts);
     $$("[data-close-form]").forEach(b => b.addEventListener("click", () => { $("#" + b.dataset.closeForm).hidden = true; }));
-    $("#account-search").addEventListener("input", renderAccounts); $("#account-type-filter").addEventListener("change", renderAccounts); $("#balance-filter").addEventListener("change", renderAccounts);
+    $("#account-search").addEventListener("input", renderAccounts); $("#balance-filter").addEventListener("change", renderAccounts);
     $("#entry-account-search").addEventListener("input", filterAccountPicker);
     $("#entry-accounts").addEventListener("change", updateAccountPickerCount);
     $("#select-visible-accounts").addEventListener("click", () => {
@@ -1006,6 +1052,12 @@
     });
     $("#email-account-balance").addEventListener("click", () => { try { composeLedgerBalanceEmail(); } catch (error) { status(error.message, "error"); } });
     $("#show-removed-ledger").addEventListener("change", () => { if (state.activeLedgerId) renderAccountLedger(state.activeLedgerId); });
+    $("#ledger-account-filter").addEventListener("change", () => { if (state.activeLedgerId) renderAccountLedger(state.activeLedgerId); });
+    $("#ledger-members").addEventListener("click", e => {
+      const button = e.target.closest("[data-ledger-member]"); if (!button || !state.activeLedgerId) return;
+      $("#ledger-account-filter").value = button.dataset.ledgerMember;
+      renderAccountLedger(state.activeLedgerId);
+    });
     $("#export-ledger-csv").addEventListener("click", exportAccountLedger);
     $("#show-ledger-payment").addEventListener("click", openLedgerPayment);
     $("#ledger-settlement-type").addEventListener("change", syncLedgerSettlementForm);
