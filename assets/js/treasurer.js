@@ -4,6 +4,7 @@
   const SUPABASE_URL = "https://buvrqioskjjhszqkpypa.supabase.co";
   const SUPABASE_KEY = "sb_publishable_I15v7OgXeqzJCCg-r7RwRw_ievTWP8V";
   const INVITATION_API = "https://pack3963-auth-email.cubscouts3963.workers.dev/api/treasurer/invite-user";
+  const RECEIPT_DRIVE_SYNC_API = "https://pack3963-auth-email.cubscouts3963.workers.dev/api/treasurer/receipt-drive-sync";
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: { persistSession: true, detectSessionInUrl: true, autoRefreshToken: true }
   });
@@ -437,7 +438,16 @@
     const rows = filteredExpenses();
     $("#expenses-table").innerHTML = rows.length ? rows.map(e => {
       const receipts = state.receipts.filter(r => r.expense_id === e.id);
-      const receipt = receipts.length ? receipts.map(r => `<button class="text-button" type="button" data-open-receipt="${r.storage_path}">${esc(r.original_filename)}</button>`).join("<br>") : "Missing";
+      const receipt = receipts.length ? receipts.map(r => {
+        const driveStatus = r.drive_sync_status === "synced"
+          ? `<small class="balance-credit">Saved to Google Drive${r.drive_filename ? ` as ${esc(r.drive_filename)}` : ""}</small>`
+          : r.drive_sync_status === "syncing"
+            ? '<small>Saving to Google Drive…</small>'
+            : r.drive_sync_status === "error"
+              ? `<small class="balance-due">Drive sync failed</small>${canWrite ? `<br><button class="text-button" type="button" data-sync-receipt="${r.id}">Retry Drive sync</button>` : ""}`
+              : `<small>Waiting for Google Drive</small>${canWrite ? `<br><button class="text-button" type="button" data-sync-receipt="${r.id}">Sync now</button>` : ""}`;
+        return `<button class="text-button" type="button" data-open-receipt="${r.storage_path}">${esc(r.original_filename)}</button><br>${driveStatus}`;
+      }).join("<br>") : "Missing";
       const action = canWrite ? (e.voided_at
         ? `<button class="action-button" data-restore-expense="${e.id}" type="button">Restore</button>`
         : `<div class="action-group"><button class="action-button" data-edit-expense="${e.id}" type="button">Edit</button><button class="action-button" data-void-expense="${e.id}" type="button">Remove</button></div>`) : "";
@@ -596,10 +606,53 @@
       const path = `${data.id}/${Date.now()}-${safe}`;
       const uploaded = await client.storage.from("pack-receipts").upload(path, file, { contentType: file.type, upsert: false });
       if (uploaded.error) throw new Error(`Expense saved, but receipt upload failed: ${uploaded.error.message}`);
-      const saved = await client.from("expense_receipts").insert({ expense_id: data.id, storage_path: path, original_filename: file.name, content_type: file.type || null, size_bytes: file.size });
+      const saved = await client.from("expense_receipts").insert({ expense_id: data.id, storage_path: path, original_filename: file.name, content_type: file.type || null, size_bytes: file.size }).select().single();
       if (saved.error) throw saved.error;
+      const drive = await attemptReceiptDriveSync({ receipt_id: saved.data.id });
+      delete form.dataset.editing;
+      return { message: drive.failed ? "Expense saved. The receipt remains safely stored in the portal and is waiting for Google Drive retry." : "Expense and receipt saved to Google Drive." };
     }
+    const hasReceipts = state.receipts.some(receipt => receipt.expense_id === data.id);
+    const drive = hasReceipts ? await attemptReceiptDriveSync({ expense_id: data.id }) : { failed: 0, synced: 0 };
     delete form.dataset.editing;
+    return { message: drive.failed ? "Expense corrections saved. The receipt remains safely stored and needs a Google Drive retry." : hasReceipts ? "Expense saved and its Google Drive receipt was reorganized." : "Expense saved." };
+  }
+
+  async function requestReceiptDriveSync(payload) {
+    const { data } = await client.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) throw new Error("Your session expired. Sign in again before synchronizing receipts.");
+    const response = await fetch(RECEIPT_DRIVE_SYNC_API, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok && !result.results) throw new Error(result.error || "Google Drive synchronization failed.");
+    return result;
+  }
+
+  async function attemptReceiptDriveSync(payload) {
+    try { return await requestReceiptDriveSync(payload); }
+    catch (error) { return { synced: 0, failed: 1, error: error.message || "Google Drive synchronization failed." }; }
+  }
+
+  async function syncPendingDriveReceipts() {
+    const button = $("#sync-drive-receipts");
+    button.disabled = true;
+    status("Reviewing existing receipts and organizing Google Drive…", "", "#drive-sync-status");
+    try {
+      const result = await requestReceiptDriveSync({ sync_pending: true });
+      const message = result.failed
+        ? `${result.synced} receipt${result.synced === 1 ? "" : "s"} synchronized; ${result.failed} still need attention.`
+        : `${result.synced} receipt${result.synced === 1 ? "" : "s"} organized in Google Drive.`;
+      status(message, result.failed ? "error" : "success", "#drive-sync-status");
+      await loadAll();
+    } catch (error) {
+      status(error.message || "Unable to synchronize receipts.", "error", "#drive-sync-status");
+    } finally {
+      button.disabled = false;
+    }
   }
 
   function syncExpenseBalanceControl() {
@@ -870,7 +923,7 @@
 
   async function submitHandler(form, action, success) {
     status("Saving…");
-    try { await action(form); form.reset(); setDefaults(); if (form.classList.contains("collapsible-form")) form.hidden = true; status(success, "success"); await loadAll(); }
+    try { const result = await action(form); form.reset(); setDefaults(); if (form.classList.contains("collapsible-form")) form.hidden = true; status(result?.message || success, "success"); await loadAll(); }
     catch (error) { status(error.message || "Unable to save.", "error"); }
   }
 
@@ -889,6 +942,7 @@
     $$("[data-go-tab]").forEach(b => b.addEventListener("click", () => openTab(b.dataset.goTab)));
     [["#show-account-form","#account-form"],["#show-entry-form","#entry-form"],["#show-bank-form","#bank-form"]].forEach(([button, form]) => $(button).addEventListener("click", () => { $(form).hidden = false; $(form).scrollIntoView({ behavior: "smooth", block: "start" }); }));
     $("#show-expense-form").addEventListener("click", openNewExpense);
+    $("#sync-drive-receipts").addEventListener("click", syncPendingDriveReceipts);
     $$("[data-close-form]").forEach(b => b.addEventListener("click", () => { $("#" + b.dataset.closeForm).hidden = true; }));
     $("#account-search").addEventListener("input", renderAccounts); $("#account-type-filter").addEventListener("change", renderAccounts); $("#balance-filter").addEventListener("change", renderAccounts);
     $("#entry-account-search").addEventListener("input", filterAccountPicker);
@@ -976,6 +1030,12 @@
         if (b.dataset.voidExpense) await voidRecord("expenses", b.dataset.voidExpense);
         if (b.dataset.restoreExpense) await voidRecord("expenses", b.dataset.restoreExpense, true);
         if (b.dataset.openReceipt) { const { data, error } = await client.storage.from("pack-receipts").createSignedUrl(b.dataset.openReceipt, 60); if (error) throw error; window.open(data.signedUrl, "_blank", "noopener"); }
+        if (b.dataset.syncReceipt) {
+          status("Synchronizing receipt with Google Drive…", "", "#drive-sync-status");
+          const result = await requestReceiptDriveSync({ receipt_id: b.dataset.syncReceipt });
+          status(result.failed ? "The receipt is still waiting for Google Drive. Check the connection and try again." : "Receipt organized in Google Drive.", result.failed ? "error" : "success", "#drive-sync-status");
+          await loadAll();
+        }
       } catch (error) { status(error.message, "error"); }
     });
     $("#roster-file").addEventListener("change", async e => {

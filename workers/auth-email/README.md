@@ -8,6 +8,15 @@ This Cloudflare Worker handles Supabase Auth's **Send Email** HTTP hook and send
 - Supabase hook: `POST /hooks/supabase/send-email`
 - Production URL: `https://pack3963-auth-email.cubscouts3963.workers.dev/hooks/supabase/send-email`
 - Admin invitations: `POST /api/treasurer/invite-user` (authenticated administrator only)
+- Google Drive receipt sync: `POST /api/treasurer/receipt-drive-sync` (authenticated administrator or treasurer only)
+
+## Treasury receipt archive
+
+The receipt-sync endpoint mirrors the private `pack-receipts` Supabase object into the Pack-owned `2026 - 2027 Scouting Season` Google Drive folder. It keeps the Supabase object as the portal fallback and records the Drive file ID, generated filename, month folder, status, and timestamps on `expense_receipts`.
+
+Month folders are based on the expense's `purchased_on` date—not the upload date. Files use the format `YYYY-MM-DD - Vendor - Category - $0.00.ext`. Editing an expense synchronizes its existing Drive file, including moving it to the correct month folder. Missing/deleted Drive copies are recreated from the private Supabase copy. Duplicate generated names receive a numeric suffix.
+
+The portal includes **Organize receipts in Google Drive** for migrating pending or failed receipts in batches of 25. Every receipt-row change is captured by the treasury audit trigger.
 
 ## Portal invitations
 
@@ -27,6 +36,11 @@ Set these as Cloudflare Worker secrets. Never commit their values.
 
 - `RESEND_API_KEY` — Resend sending-only key restricted to `pack3963.com`
 - `SUPABASE_AUTH_HOOK_SECRET` — the full secret generated when the Supabase Send Email HTTP hook is created, including the `v1,whsec_` prefix
+- `GOOGLE_CLIENT_ID` — OAuth web application client ID for the Pack Google Cloud project
+- `GOOGLE_CLIENT_SECRET` — OAuth web application client secret
+- `GOOGLE_REFRESH_TOKEN` — offline OAuth refresh token granted by `cubscouts3963@gmail.com` with Drive file access
+
+`GOOGLE_DRIVE_ROOT_FOLDER_ID` is non-secret configuration in `wrangler.jsonc`. Google OAuth values must remain encrypted Worker secrets.
 
 ## Supabase activation
 

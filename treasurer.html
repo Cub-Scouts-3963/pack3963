@@ -218,8 +218,10 @@ styles:
       <div class="filter-bar">
         <input id="expense-search" type="search" placeholder="Search vendor, category, purchaser, or notes">
         <select id="expense-filter"><option value="active">Active expenses</option><option value="reimbursement">Reimbursements</option><option value="unpaid">Awaiting reimbursement</option><option value="missing">Missing receipt</option><option value="voided">Removed / voided</option><option value="all">Everything</option></select>
+        <button class="btn-secondary write-control" type="button" id="sync-drive-receipts">Organize receipts in Google Drive</button>
         <button class="btn-blue write-control" type="button" id="show-expense-form">Add expense</button>
       </div>
+      <p id="drive-sync-status" class="form-status" role="status"></p>
       <form id="expense-form" class="card portal-form collapsible-form" hidden>
         <input name="expense_id" type="hidden">
         <div class="card-heading-row"><h3 id="expense-form-heading">Record Pack expense</h3><button type="button" class="text-button" data-close-form="expense-form">Close</button></div>

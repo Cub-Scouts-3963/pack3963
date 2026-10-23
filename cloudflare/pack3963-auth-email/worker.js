@@ -10,6 +10,7 @@ const ACTIONS = {
 const DEFAULT_COPY = ACTIONS.magiclink;
 const MAX_BODY = 65536;
 const SKEW = 300;
+const RECEIPT_SYNC_PATH = "/api/treasurer/receipt-drive-sync";
 
 export default {
   async fetch(request, env) {
@@ -20,6 +21,11 @@ export default {
     if (url.pathname === "/api/treasurer/invite-user") {
       if (request.method === "OPTIONS") return corsResponse(request, null, 204);
       if (request.method === "POST") return handleUserInvitation(request, env);
+      return corsResponse(request, { error: "method_not_allowed" }, 405);
+    }
+    if (url.pathname === RECEIPT_SYNC_PATH) {
+      if (request.method === "OPTIONS") return corsResponse(request, null, 204);
+      if (request.method === "POST") return handleReceiptDriveSync(request, env);
       return corsResponse(request, { error: "method_not_allowed" }, 405);
     }
     if (request.method === "OPTIONS" && url.pathname === "/api/treasurer/send-email") return corsResponse(request, null, 204);
@@ -160,6 +166,272 @@ async function sbFetch(env,token,path,init={}) {
   const t=await r.text(); const d=t?JSON.parse(t):null;
   if(!r.ok) throw new Error(d?.message||"Database request failed");
   return d;
+}
+
+async function activeTreasuryUser(request, env) {
+  const authorization = request.headers.get("authorization") || "";
+  const token = authorization.replace(/^Bearer\s+/i, "");
+  if (!token) return { error: "Your session expired. Sign in again.", status: 401 };
+  const response = await fetch(env.SUPABASE_URL + "/auth/v1/user", {
+    headers: { apikey: SUPABASE_PUBLISHABLE_KEY, authorization: "Bearer " + token },
+    signal: AbortSignal.timeout(10000)
+  });
+  if (!response.ok) return { error: "Your session expired. Sign in again.", status: 401 };
+  const user = await response.json();
+  const access = await sbFetch(env, token, "authorized_users?select=role,active&email=eq." + encodeURIComponent(String(user.email || "").toLowerCase()) + "&active=eq.true");
+  if (!access.length || !["admin", "treasurer"].includes(access[0].role)) {
+    return { error: "Only an active administrator or treasurer can synchronize receipts.", status: 403 };
+  }
+  return { token, user, role: access[0].role };
+}
+
+async function handleReceiptDriveSync(request, env) {
+  if (!allowedOrigin(request)) return corsResponse(request, { error: "origin_not_allowed" }, 403);
+  try {
+    const actor = await activeTreasuryUser(request, env);
+    if (actor.error) return corsResponse(request, { error: actor.error }, actor.status);
+    const statedLength = Number(request.headers.get("content-length") || 0);
+    if (statedLength > 4096) return corsResponse(request, { error: "Receipt sync request is too large." }, 413);
+    const payload = await request.json();
+    const receiptId = validUuid(payload?.receipt_id) ? payload.receipt_id : null;
+    const expenseId = validUuid(payload?.expense_id) ? payload.expense_id : null;
+    const syncPending = payload?.sync_pending === true;
+    if (!receiptId && !expenseId && !syncPending) return corsResponse(request, { error: "Choose a receipt, expense, or the pending queue." }, 400);
+
+    const filters = receiptId
+      ? "id=eq." + receiptId
+      : expenseId
+        ? "expense_id=eq." + expenseId
+        : "drive_sync_status=in.(pending,error)";
+    const receipts = await sbFetch(env, actor.token, "expense_receipts?select=*&" + filters + "&order=created_at.asc&limit=25");
+    if (!receipts.length) return corsResponse(request, { ok: true, synced: 0, failed: 0, results: [] });
+
+    const accessToken = await googleAccessToken(env);
+    const results = [];
+    for (const receipt of receipts) {
+      try {
+        const result = await syncReceiptToDrive(env, actor.token, accessToken, receipt);
+        results.push({ receipt_id: receipt.id, ok: true, ...result });
+      } catch (error) {
+        const message = publicDriveError(error);
+        await updateReceiptSync(env, actor.token, receipt.id, {
+          drive_sync_status: "error",
+          drive_sync_error: message,
+          drive_last_attempt_at: new Date().toISOString()
+        });
+        console.warn(JSON.stringify({ event: "receipt_drive_sync_failed", receipt_id: receipt.id, reason: message }));
+        results.push({ receipt_id: receipt.id, ok: false, error: message });
+      }
+    }
+    const synced = results.filter(item => item.ok).length;
+    const failed = results.length - synced;
+    console.log(JSON.stringify({ event: "receipt_drive_sync_complete", requested: results.length, synced, failed }));
+    return corsResponse(request, { ok: failed === 0, synced, failed, results }, failed === results.length ? 502 : 200);
+  } catch (error) {
+    const message = publicDriveError(error);
+    console.error(JSON.stringify({ event: "receipt_drive_sync_failed", reason: message }));
+    return corsResponse(request, { error: message }, 500);
+  }
+}
+
+async function syncReceiptToDrive(env, token, accessToken, receipt) {
+  await updateReceiptSync(env, token, receipt.id, {
+    drive_sync_status: "syncing",
+    drive_sync_error: null,
+    drive_last_attempt_at: new Date().toISOString()
+  });
+  const expenses = await sbFetch(env, token, "expenses?select=id,purchased_on,vendor,category,amount_cents,description,voided_at&id=eq." + receipt.expense_id + "&limit=1");
+  const expense = expenses[0];
+  if (!expense) throw new Error("The linked expense no longer exists.");
+  if (expense.voided_at) throw new Error("Restore the removed expense before synchronizing its receipt.");
+
+  const folderName = driveFolderName(expense.purchased_on);
+  const folderId = await findOrCreateDriveFolder(env, accessToken, folderName);
+  let filename = driveReceiptFilename(expense, receipt);
+  let driveFile;
+  if (receipt.drive_file_id) {
+    try {
+      driveFile = await updateDriveFile(accessToken, receipt.drive_file_id, filename, folderId, receipt.drive_folder_id);
+    } catch (error) {
+      if (error.status !== 404) throw error;
+      filename = await uniqueDriveFilename(accessToken, folderId, filename);
+      const stored = await fetchStoredReceipt(env, token, receipt.storage_path);
+      driveFile = await uploadDriveFile(accessToken, stored, filename, folderId, receipt.content_type, receipt.size_bytes);
+    }
+  } else {
+    filename = await uniqueDriveFilename(accessToken, folderId, filename);
+    const stored = await fetchStoredReceipt(env, token, receipt.storage_path);
+    driveFile = await uploadDriveFile(accessToken, stored, filename, folderId, receipt.content_type, receipt.size_bytes);
+  }
+  const syncedAt = new Date().toISOString();
+  await updateReceiptSync(env, token, receipt.id, {
+    drive_file_id: driveFile.id,
+    drive_folder_id: folderId,
+    drive_filename: driveFile.name || filename,
+    drive_web_view_link: driveFile.webViewLink || null,
+    drive_sync_status: "synced",
+    drive_sync_error: null,
+    drive_last_attempt_at: syncedAt,
+    drive_synced_at: syncedAt
+  });
+  return { drive_file_id: driveFile.id, drive_filename: driveFile.name || filename, folder_name: folderName };
+}
+
+async function googleAccessToken(env) {
+  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !env.GOOGLE_REFRESH_TOKEN || !env.GOOGLE_DRIVE_ROOT_FOLDER_ID) {
+    throw new Error("Google Drive synchronization is not configured yet.");
+  }
+  const body = new URLSearchParams({
+    client_id: env.GOOGLE_CLIENT_ID,
+    client_secret: env.GOOGLE_CLIENT_SECRET,
+    refresh_token: env.GOOGLE_REFRESH_TOKEN,
+    grant_type: "refresh_token"
+  });
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body,
+    signal: AbortSignal.timeout(15000)
+  });
+  const result = await response.json();
+  if (!response.ok || !result.access_token) throw new Error("Google authorization needs to be reconnected.");
+  return result.access_token;
+}
+
+async function findOrCreateDriveFolder(env, accessToken, folderName) {
+  const rootId = String(env.GOOGLE_DRIVE_ROOT_FOLDER_ID);
+  const escapedName = folderName.replace(/'/g, "\\'");
+  const q = `'${rootId}' in parents and name = '${escapedName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+  const search = await googleFetch("https://www.googleapis.com/drive/v3/files?spaces=drive&pageSize=10&fields=files(id,name)&q=" + encodeURIComponent(q), accessToken);
+  if (search.files?.length) return search.files[0].id;
+  const created = await googleFetch("https://www.googleapis.com/drive/v3/files?fields=id,name", accessToken, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: folderName, mimeType: "application/vnd.google-apps.folder", parents: [rootId] })
+  });
+  return created.id;
+}
+
+async function fetchStoredReceipt(env, token, storagePath) {
+  const path = String(storagePath || "").split("/").map(encodeURIComponent).join("/");
+  const response = await fetch(env.SUPABASE_URL + "/storage/v1/object/authenticated/pack-receipts/" + path, {
+    headers: { apikey: SUPABASE_PUBLISHABLE_KEY, authorization: "Bearer " + token },
+    signal: AbortSignal.timeout(30000)
+  });
+  if (!response.ok || !response.body) throw new Error("The private Supabase receipt could not be downloaded.");
+  return response;
+}
+
+async function uploadDriveFile(accessToken, stored, filename, folderId, contentType, sizeBytes) {
+  const type = contentType || stored.headers.get("content-type") || "application/octet-stream";
+  const length = Number(sizeBytes || stored.headers.get("content-length") || 0);
+  if (!Number.isFinite(length) || length <= 0 || length > 10485760) throw new Error("Receipt size is invalid or exceeds 10 MB.");
+  const start = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,webViewLink,parents", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer " + accessToken,
+      "content-type": "application/json; charset=UTF-8",
+      "x-upload-content-type": type,
+      "x-upload-content-length": String(length)
+    },
+    body: JSON.stringify({ name: filename, parents: [folderId] }),
+    signal: AbortSignal.timeout(15000)
+  });
+  if (!start.ok) throw new Error("Google Drive rejected the receipt upload.");
+  const location = start.headers.get("location");
+  if (!location) throw new Error("Google Drive did not provide an upload location.");
+  const uploaded = await fetch(location, {
+    method: "PUT",
+    headers: { "content-type": type, "content-length": String(length) },
+    body: stored.body,
+    signal: AbortSignal.timeout(60000)
+  });
+  if (!uploaded.ok) throw new Error("Google Drive could not finish the receipt upload.");
+  return uploaded.json();
+}
+
+async function updateDriveFile(accessToken, fileId, filename, folderId, previousFolderId) {
+  const url = new URL("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(fileId));
+  url.searchParams.set("fields", "id,name,webViewLink,parents");
+  if (folderId && folderId !== previousFolderId) url.searchParams.set("addParents", folderId);
+  if (previousFolderId && folderId !== previousFolderId) url.searchParams.set("removeParents", previousFolderId);
+  return googleFetch(url.toString(), accessToken, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: filename })
+  });
+}
+
+async function uniqueDriveFilename(accessToken, folderId, filename) {
+  const dot = filename.lastIndexOf(".");
+  const stem = dot > 0 ? filename.slice(0, dot) : filename;
+  const extension = dot > 0 ? filename.slice(dot) : "";
+  const escapedStem = stem.replace(/'/g, "\\'");
+  const q = `'${folderId}' in parents and name contains '${escapedStem}' and trashed = false`;
+  const result = await googleFetch("https://www.googleapis.com/drive/v3/files?spaces=drive&pageSize=100&fields=files(name)&q=" + encodeURIComponent(q), accessToken);
+  const names = new Set((result.files || []).map(file => file.name));
+  if (!names.has(filename)) return filename;
+  for (let number = 2; number <= 100; number++) {
+    const candidate = `${stem} (${number})${extension}`;
+    if (!names.has(candidate)) return candidate;
+  }
+  throw new Error("Too many receipts have the same generated filename.");
+}
+
+async function googleFetch(url, accessToken, init = {}) {
+  const headers = new Headers(init.headers || {});
+  headers.set("authorization", "Bearer " + accessToken);
+  const response = await fetch(url, { ...init, headers, signal: init.signal || AbortSignal.timeout(15000) });
+  const result = await response.json();
+  if (!response.ok) {
+    const error = new Error(result?.error?.message || "Google Drive request failed.");
+    error.status = response.status;
+    throw error;
+  }
+  return result;
+}
+
+async function updateReceiptSync(env, token, receiptId, values) {
+  await sbFetch(env, token, "expense_receipts?id=eq." + receiptId, {
+    method: "PATCH",
+    headers: { prefer: "return=minimal" },
+    body: JSON.stringify(values)
+  });
+}
+
+function validUuid(value) {
+  return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+export function driveFolderName(purchasedOn) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(purchasedOn || ""))) throw new Error("The expense needs a valid purchase date.");
+  const date = new Date(String(purchasedOn) + "T12:00:00Z");
+  if (Number.isNaN(date.valueOf())) throw new Error("The expense needs a valid purchase date.");
+  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(date);
+}
+
+export function driveReceiptFilename(expense, receipt) {
+  const original = String(receipt?.original_filename || "receipt");
+  const extensionMatch = original.match(/\.[a-zA-Z0-9]{1,8}$/);
+  const extension = extensionMatch ? extensionMatch[0].toLowerCase() : extensionForType(receipt?.content_type);
+  const vendor = cleanDriveName(expense?.vendor || "Unknown vendor");
+  const category = cleanDriveName(expense?.category || expense?.description || "Expense");
+  const amount = ((Number(expense?.amount_cents) || 0) / 100).toFixed(2);
+  return cleanDriveName(`${expense?.purchased_on || "Undated"} - ${vendor} - ${category} - $${amount}`) + extension;
+}
+
+function cleanDriveName(value) {
+  return String(value).replace(/[\\/:*?"<>|\u0000-\u001f]/g, "-").replace(/\s+/g, " ").replace(/\s*-\s*-+/g, " - ").trim().slice(0, 180) || "Receipt";
+}
+
+function extensionForType(type) {
+  return ({ "application/pdf": ".pdf", "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp" })[type] || ".bin";
+}
+
+function publicDriveError(error) {
+  const message = String(error?.message || error || "Receipt synchronization failed.");
+  if (/authorization|configured|purchase date|expense|receipt|Google Drive|10 MB|Supabase/i.test(message)) return message.slice(0, 300);
+  return "Receipt synchronization failed. Try again or reconnect Google Drive.";
 }
 async function handleTreasurerEmail(request,env) {
   if(!allowedOrigin(request)) return corsResponse(request,{error:"origin_not_allowed"},403);
