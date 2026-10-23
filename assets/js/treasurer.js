@@ -7,6 +7,7 @@
   const RECEIPT_DRIVE_SYNC_API = "https://pack3963-auth-email.cubscouts3963.workers.dev/api/treasurer/receipt-drive-sync";
   const INVOICE_DRIVE_SYNC_API = "https://pack3963-auth-email.cubscouts3963.workers.dev/api/treasurer/invoice-drive-sync";
   const TREASURER_EMAIL_API = "https://pack3963-treasury-email.cubscouts3963.workers.dev/api/treasurer/send-email";
+  const CREATE_INVOICE_API = "https://pack3963-treasury-email.cubscouts3963.workers.dev/api/treasurer/create-invoice";
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: { persistSession: true, detectSessionInUrl: true, autoRefreshToken: true }
   });
@@ -419,6 +420,7 @@
       return `<label class="ledger-email-option"><input type="checkbox" value="${esc(entry.id)}" ${outstanding ? "checked" : ""}><span><strong>${esc(entry.description)}</strong><small>${esc(entry.occurred_on)} · ${esc(accountName(entry.account_id))} · ${signedMoney(entry)}${outstanding ? " · " + money(chargeRemaining(entry)) + " outstanding" : ""}</small></span></label>`;
     }).join("");
     const form = $("#ledger-email-form");
+    form.elements.due_date.value = invoiceDueDate(rows.filter(entry => entry.entry_type === "charge" && chargeRemaining(entry) > 0));
     form.elements.subject.value = `Pack 3963 balance details — ${family.display_name}`;
     form.elements.body_text.value = "Here are the selected details from your Pack 3963 family account. Please review the items below and contact us if a payment is missing or you have a question.\n\nThank you for supporting Pack 3963.";
     status("", "", "#ledger-email-status");
@@ -448,6 +450,7 @@
         ledger_entry_ids: entryIds,
         delivery_mode: "ledger",
         message_type: "invoice",
+        due_date: String(f.get("due_date") || ""),
         subject: String(f.get("subject") || "").trim(),
         body_text: String(f.get("body_text") || "").trim()
       })
@@ -568,17 +571,50 @@
     document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
   }
 
-  function printAccountLedger() {
+  function invoiceDueDate(entries) {
+    const dueDates = entries.map(entry => entry.due_on).filter(value => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))).sort();
+    if (dueDates.length) return dueDates[dueDates.length - 1];
+    const fallback = new Date();
+    fallback.setDate(fallback.getDate() + 14);
+    return fallback.toISOString().slice(0, 10);
+  }
+
+  async function printAccountLedger() {
     const account = state.accounts.find(a => a.id === state.activeLedgerId);
     if (!account) return;
-    const popup = window.open("", "_blank");
-    if (!popup) throw new Error("Please allow pop-ups to print this ledger.");
-    const table = $("#account-ledger .ledger-table-wrap").innerHTML;
-    const summary = $(".ledger-summary").innerHTML;
-    popup.document.write(`<!doctype html><html><head><title>${esc(account.display_name)} ledger</title><style>body{font:14px Arial,sans-serif;color:#172b3f;margin:32px}h1{color:#004b93;margin-bottom:4px}.meta{color:#53687c;margin-bottom:24px}.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:20px 0}.summary div{padding:12px;border-top:4px solid #f5c400;background:#f4f7f9}.summary span,.summary strong{display:block}.summary strong{font-size:20px;margin-top:6px}table{width:100%;border-collapse:collapse}th,td{padding:8px;border-bottom:1px solid #d8e0e8;text-align:left}th{background:#eef2f6}.money{text-align:right}.is-voided{opacity:.55;text-decoration:line-through}@media print{body{margin:0}}</style></head><body><h1>${esc(account.display_name)}</h1><div class="meta">${esc($("#ledger-meta").textContent)}</div><div class="summary">${summary}</div>${table}</body></html>`);
+    if (!["admin", "treasurer"].includes(state.access?.role)) throw new Error("Your role cannot generate invoices.");
+    const { family } = familyContacts(account);
+    if (!family) throw new Error("This family account could not be found.");
+    const entries = ledgerEmailEntries(account);
+    if (!entries.length) throw new Error("This family does not have any ledger items to invoice.");
+    const session = (await client.auth.getSession()).data.session;
+    if (!session) throw new Error("Your session expired. Sign in again.");
+    const popup = window.open("about:blank", "_blank");
+    if (!popup) throw new Error("Please allow pop-ups to create and print the invoice.");
+    popup.document.write("<!doctype html><title>Creating invoice…</title><p style='font:16px Arial;padding:32px'>Creating the official Pack 3963 invoice…</p>");
     popup.document.close();
-    popup.focus();
-    setTimeout(() => popup.print(), 150);
+    try {
+      const response = await fetch(CREATE_INVOICE_API, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: "Bearer " + session.access_token },
+        body: JSON.stringify({
+          household_id: family.id,
+          ledger_entry_ids: entries.map(entry => entry.id),
+          due_date: invoiceDueDate(entries.filter(entry => entry.entry_type === "charge" && chargeRemaining(entry) > 0)),
+          subject: `Pack 3963 family invoice — ${family.display_name}`,
+          body_text: "Please review the Pack 3963 family account charges, payments, and credits included below. Contact us if a payment is missing or you have a question."
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to create the invoice.");
+      const token = new URL(data.invoice_url).searchParams.get("token");
+      popup.location.replace(`${location.origin}/invoice/?token=${encodeURIComponent(token)}&print=1`);
+      status(`Invoice ${data.invoice_number} created. It has been opened for printing or saving as a PDF.`, "success");
+      requestInvoiceDriveSync({ invoice_ids: [data.invoice_id] }).catch(() => {});
+    } catch (error) {
+      popup.close();
+      throw error;
+    }
   }
 
   function filteredEntries() {
@@ -1248,7 +1284,14 @@
       try { await saveLedgerPayment(form); } catch (error) { status(error.message || "Unable to save payment.", "error", "#ledger-payment-status"); }
       finally { button.disabled = false; }
     });
-    $("#print-account-ledger").addEventListener("click", () => { try { printAccountLedger(); } catch (error) { status(error.message, "error"); } });
+    $("#print-account-ledger").addEventListener("click", async event => {
+      const button = event.currentTarget;
+      if (button.disabled) return;
+      button.disabled = true;
+      status("Creating official invoice…");
+      try { await printAccountLedger(); } catch (error) { status(error.message, "error"); }
+      finally { button.disabled = false; }
+    });
     $("#transactions-table").addEventListener("click", async e => {
       const b = e.target.closest("button"); if (!b) return;
       try { if (b.dataset.voidEntry) await voidRecord("ledger_entries", b.dataset.voidEntry); if (b.dataset.restoreEntry) await voidRecord("ledger_entries", b.dataset.restoreEntry, true); } catch (error) { status(error.message, "error"); }

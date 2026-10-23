@@ -38,6 +38,9 @@ test("Drive invoice files live under readable family names", () => {
     invoice_date: "2026-10-23",
     invoice_number: "P3963-20261023-ABC12345-DEF0",
     family_name: "Weninger family",
+    bill_to: "Brandon Weninger, Rebecca Weninger",
+    scout_names: [{ name: "Benjamin Weninger", den: "Wolf" }],
+    due_date: "2026-11-06",
     balance_cents: 5000,
     body_text: "Please review this balance.",
     support_email: "cubscouts3963@gmail.com",
@@ -51,4 +54,7 @@ test("Drive invoice files live under readable family names", () => {
   assert.match(html, /Weninger family/);
   assert.match(html, /Pack fees/);
   assert.match(html, /\$50\.00/);
+  assert.match(html, /Pathway to Adventure Council/);
+  assert.match(html, /c\/o Eden United Church of Christ/);
+  assert.match(html, /2026-11-06/);
 });
