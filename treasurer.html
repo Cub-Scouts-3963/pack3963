@@ -45,7 +45,7 @@ styles:
 
     <nav class="portal-tabs" aria-label="Treasurer sections">
       <button class="portal-tab is-active" type="button" data-tab="dashboard">Dashboard</button>
-      <button class="portal-tab" type="button" data-tab="accounts">Scouts &amp; accounts</button>
+      <button class="portal-tab" type="button" data-tab="accounts">Families</button>
       <button class="portal-tab" type="button" data-tab="transactions">Charges &amp; payments</button>
       <button class="portal-tab" type="button" data-tab="expenses">Expenses &amp; receipts</button>
       <button class="portal-tab" type="button" data-tab="orders">Orders</button>
@@ -94,13 +94,12 @@ styles:
 
     <section class="portal-panel" data-panel="accounts">
       <div class="filter-bar">
-        <input id="account-search" type="search" placeholder="Search Scout, family, den, or ID">
-        <select id="account-type-filter" aria-label="Filter accounts by type"><option value="all">All types</option><option value="scout">Scouts</option><option value="household">Families</option><option value="parent">Parents</option></select>
+        <input id="account-search" type="search" placeholder="Search family, parent, Scout, den, or ID">
         <select id="balance-filter" aria-label="Filter accounts by status"><option value="current">All current statuses</option><option value="due">Balance due</option><option value="credit">Has a credit</option><option value="paid">Paid / even</option><option value="inactive">Removed / inactive</option><option value="all">Current and removed</option></select>
-        <button class="btn-blue write-control" type="button" id="show-account-form">Add Scout or account</button>
+        <button class="btn-blue write-control" type="button" id="show-account-form">Add family or Scout</button>
       </div>
       <form id="account-form" class="card portal-form collapsible-form" hidden>
-        <div class="card-heading-row"><h3>Add Scout or family account</h3><button type="button" class="text-button" data-close-form="account-form">Close</button></div>
+        <div class="card-heading-row"><h3>Add a family or Scout</h3><button type="button" class="text-button" data-close-form="account-form">Close</button></div>
         <div class="form-grid">
           <label>Account type<select name="account_type" required><option value="scout">Scout</option><option value="household">Household</option><option value="parent">Parent</option></select></label>
           <label>Display name<input name="display_name" required placeholder="Jordan Smith"></label>
@@ -113,10 +112,10 @@ styles:
         <label>Notes<textarea name="notes" rows="2"></textarea></label>
         <button class="btn-blue" type="submit">Add account</button>
       </form>
-      <div class="table-wrap card"><table><thead><tr><th>Scout / account</th><th>Family contacts</th><th>Den</th><th>Type</th><th class="money">Balance</th><th>Status</th><th>Ledger</th><th class="write-control">Action</th></tr></thead><tbody id="accounts-table"></tbody></table></div>
+      <div class="table-wrap card family-table-wrap"><table><thead><tr><th>Family</th><th>Scouts</th><th>Family contacts</th><th class="money">Total balance</th><th>Status</th><th>Actions</th></tr></thead><tbody id="accounts-table"></tbody></table></div>
       <section id="account-ledger" class="card ledger-panel" hidden aria-labelledby="ledger-title">
         <div class="card-heading-row">
-          <div><p class="eyebrow">Account ledger</p><h3 id="ledger-title">Account ledger</h3></div>
+          <div><p class="eyebrow">Family ledger</p><h3 id="ledger-title">Family ledger</h3></div>
           <button type="button" class="text-button" id="close-account-ledger">Close</button>
         </div>
         <p id="ledger-meta" class="ledger-meta"></p>
@@ -138,6 +137,7 @@ styles:
           </div>
           <p id="ledger-contact-status" class="form-status" role="status"></p>
         </form>
+        <div class="family-ledger-members" id="ledger-members" aria-label="Family and Scout balances"></div>
         <div class="ledger-summary" aria-label="Ledger totals">
           <div><span>Charges</span><strong id="ledger-charges">$0.00</strong></div>
           <div><span>Payments and credits</span><strong id="ledger-payments">$0.00</strong></div>
@@ -145,6 +145,7 @@ styles:
         </div>
         <div class="ledger-actions">
           <button class="btn-blue write-control" type="button" id="show-ledger-payment">Add payment</button>
+          <label class="ledger-account-filter">Show activity for<select id="ledger-account-filter" aria-label="Filter ledger by family member"><option value="all">Entire family</option></select></label>
           <label class="check-row ledger-toggle"><input id="show-removed-ledger" type="checkbox"> Show removed entries</label>
           <button class="btn-secondary" type="button" id="export-ledger-csv">Export CSV</button>
           <button class="btn-secondary" type="button" id="print-account-ledger">Print / Save PDF</button>
