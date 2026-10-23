@@ -5,6 +5,7 @@
   const SUPABASE_KEY = "sb_publishable_I15v7OgXeqzJCCg-r7RwRw_ievTWP8V";
   const INVITATION_API = "https://pack3963-auth-email.cubscouts3963.workers.dev/api/treasurer/invite-user";
   const RECEIPT_DRIVE_SYNC_API = "https://pack3963-auth-email.cubscouts3963.workers.dev/api/treasurer/receipt-drive-sync";
+  const TREASURER_EMAIL_API = "https://pack3963-auth-email.cubscouts3963.workers.dev/api/treasurer/send-email";
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: { persistSession: true, detectSessionInUrl: true, autoRefreshToken: true }
   });
@@ -219,28 +220,50 @@
       : account?.account_type === "household" ? account : null;
   }
 
-  function primaryFamilyContact(account) {
+  function familyContacts(account) {
     const family = ledgerFamily(account);
-    if (!family) return { family: null, contact: null };
-    const contacts = state.householdContacts.filter(c => c.household_account_id === family.id && c.active);
-    return { family, contact: contacts.find(c => c.is_primary) || contacts[0] || null };
+    if (!family) return { family: null, contacts: [] };
+    const contacts = state.householdContacts
+      .filter(contact => contact.household_account_id === family.id && contact.active)
+      .sort((a, b) => Number(b.is_primary) - Number(a.is_primary) || String(a.full_name).localeCompare(String(b.full_name)));
+    return { family, contacts };
+  }
+
+  function primaryFamilyContact(account) {
+    const { family, contacts } = familyContacts(account);
+    return { family, contact: contacts[0] || null };
   }
 
   function renderLedgerContact(account) {
-    const { family, contact } = primaryFamilyContact(account);
-    const email = contact?.email || family?.contact_email || account.contact_email || "";
-    $("#ledger-contact-name").textContent = contact?.full_name || (family ? family.display_name : account.display_name);
-    $("#ledger-contact-email").textContent = email || "No email on file";
-    $("#edit-ledger-contact").hidden = !family || !["admin", "treasurer"].includes(state.access?.role);
-    $("#email-account-balance").hidden = !family || !email || !["admin", "treasurer"].includes(state.access?.role);
-    $("#ledger-contact-form").hidden = true;
-    status("", "", "#ledger-contact-status");
+    const { family, contacts } = familyContacts(account);
+    const canWrite = !!family && ["admin", "treasurer"].includes(state.access?.role);
+    const fallbackEmail = family?.contact_email || account.contact_email || "";
+    const visibleContacts = contacts.length ? contacts : (fallbackEmail ? [{
+      id: "", full_name: family?.display_name || account.display_name, email: fallbackEmail,
+      relationship: "Parent / guardian", is_primary: true, legacy: true
+    }] : []);
+    $("#ledger-contact-list").innerHTML = visibleContacts.length ? visibleContacts.map(contact => `
+      <article class="ledger-contact-card">
+        <div class="ledger-contact-copy">
+          <div><strong>${esc(contact.full_name || "Parent / guardian")}</strong>${contact.is_primary ? '<span class="contact-badge">Primary</span>' : ""}</div>
+          <a href="mailto:${esc(contact.email || "")}">${esc(contact.email || "No email on file")}</a>
+          <small>${esc(contact.relationship || "Parent / guardian")}</small>
+        </div>
+        ${canWrite ? `<div class="ledger-contact-actions"><button class="btn-secondary" type="button" data-edit-family-contact="${esc(contact.id || "")}">Edit</button>${contact.id ? `<button class="text-button danger-link" type="button" data-remove-family-contact="${esc(contact.id)}">Remove</button>` : ""}</div>` : ""}
+      </article>`).join("") : '<p class="empty-contact">No parent or guardian contact is on file.</p>';
+    $("#add-ledger-contact").hidden = !canWrite;
+    $("#email-account-balance").hidden = !canWrite || !visibleContacts.some(contact => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email || ""));
   }
 
   function renderAccountLedger(id) {
     const account = state.accounts.find(a => a.id === id);
     if (!account) return;
+    const switching = state.activeLedgerId && state.activeLedgerId !== id;
     state.activeLedgerId = id;
+    if (switching) {
+      $("#ledger-contact-form").hidden = true;
+      $("#ledger-email-form").hidden = true;
+    }
     const paymentForm = $("#ledger-payment-form");
     if (paymentForm.dataset.accountId !== id) { paymentForm.hidden = true; paymentForm.reset(); delete paymentForm.dataset.paymentId; }
     paymentForm.dataset.accountId = id;
@@ -276,17 +299,34 @@
     $("#account-ledger").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  function openLedgerContactForm() {
+  function openLedgerContactForm(contactId = "") {
     const account = state.accounts.find(a => a.id === state.activeLedgerId);
-    const { family, contact } = primaryFamilyContact(account);
+    const { family, contacts } = familyContacts(account);
     if (!family) throw new Error("This account is not linked to a family account.");
+    const contact = contacts.find(item => item.id === contactId) || null;
     const form = $("#ledger-contact-form");
+    form.reset();
     form.elements.household_account_id.value = family.id;
     form.elements.contact_id.value = contact?.id || "";
     form.elements.full_name.value = contact?.full_name || "";
-    form.elements.email.value = contact?.email || family.contact_email || account.contact_email || "";
+    form.elements.email.value = contact?.email || "";
+    form.elements.relationship.value = contact?.relationship || "Parent";
+    form.elements.is_primary.checked = contact ? !!contact.is_primary : contacts.length === 0;
+    $("#ledger-contact-form-title").textContent = contact ? "Edit parent or guardian" : "Add parent or guardian";
+    status("", "", "#ledger-contact-status");
     form.hidden = false;
     form.elements.full_name.focus();
+  }
+
+  async function syncLegacyFamilyEmail(householdId) {
+    const current = state.householdContacts
+      .filter(contact => contact.household_account_id === householdId && contact.active && contact.email)
+      .sort((a, b) => Number(b.is_primary) - Number(a.is_primary))[0];
+    const email = current?.email || null;
+    let result = await client.from("financial_accounts").update({ contact_email: email }).eq("id", householdId);
+    if (result.error) throw result.error;
+    result = await client.from("financial_accounts").update({ contact_email: email }).eq("parent_account_id", householdId);
+    if (result.error) throw result.error;
   }
 
   async function saveLedgerContact(form) {
@@ -296,35 +336,120 @@
     if (!family) throw new Error("The linked family account could not be found.");
     const fullName = String(f.get("full_name") || "").trim();
     const email = String(f.get("email") || "").trim().toLowerCase();
+    const relationship = String(f.get("relationship") || "Parent").slice(0, 80);
+    const currentContacts = state.householdContacts.filter(contact => contact.household_account_id === householdId && contact.active);
+    const makePrimary = f.get("is_primary") === "on" || currentContacts.length === 0;
     if (!fullName || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("Enter the parent or guardian name and a valid email address.");
+    if (makePrimary && currentContacts.length) {
+      const demote = await client.from("household_contacts").update({ is_primary: false }).eq("household_account_id", householdId).eq("active", true);
+      if (demote.error) throw demote.error;
+    }
+    const payload = { full_name: fullName, email, relationship, is_primary: makePrimary, active: true };
     let result;
     if (f.get("contact_id")) {
-      result = await client.from("household_contacts").update({ full_name: fullName, email, is_primary: true, active: true }).eq("id", f.get("contact_id")).eq("household_account_id", householdId);
+      result = await client.from("household_contacts").update(payload).eq("id", f.get("contact_id")).eq("household_account_id", householdId);
     } else {
-      result = await client.from("household_contacts").insert({ household_account_id: householdId, full_name: fullName, email, relationship: "Parent / guardian", is_primary: true, active: true, source: "manual" });
+      result = await client.from("household_contacts").insert({ household_account_id: householdId, ...payload, source: "manual" });
     }
     if (result.error) throw result.error;
-    result = await client.from("financial_accounts").update({ contact_email: email }).eq("id", householdId);
-    if (result.error) throw result.error;
-    result = await client.from("financial_accounts").update({ contact_email: email }).eq("parent_account_id", householdId);
-    if (result.error) throw result.error;
     form.hidden = true;
+    await loadAll();
+    await syncLegacyFamilyEmail(householdId);
     await loadAll();
     if (state.activeLedgerId) renderAccountLedger(state.activeLedgerId);
   }
 
+  async function removeLedgerContact(contactId) {
+    if (!["admin", "treasurer"].includes(state.access?.role)) throw new Error("Your role cannot remove family contacts.");
+    const account = state.accounts.find(a => a.id === state.activeLedgerId);
+    const { family, contacts } = familyContacts(account);
+    const contact = contacts.find(item => item.id === contactId);
+    if (!family || !contact) throw new Error("That contact could not be found.");
+    const result = await client.from("household_contacts").update({ active: false, is_primary: false }).eq("id", contactId).eq("household_account_id", family.id);
+    if (result.error) throw result.error;
+    const remaining = contacts.filter(item => item.id !== contactId);
+    if (contact.is_primary && remaining.length) {
+      const promote = await client.from("household_contacts").update({ is_primary: true }).eq("id", remaining[0].id);
+      if (promote.error) throw promote.error;
+    }
+    await loadAll();
+    await syncLegacyFamilyEmail(family.id);
+    await loadAll();
+    renderAccountLedger(state.activeLedgerId);
+  }
+
+  function ledgerEmailEntries(account) {
+    const ids = new Set(ledgerScope(account).map(member => member.id));
+    return state.entries
+      .filter(entry => ids.has(entry.account_id) && !entry.voided_at)
+      .sort((a, b) => String(b.occurred_on).localeCompare(String(a.occurred_on)) || String(b.created_at).localeCompare(String(a.created_at)));
+  }
+
+  function updateLedgerEmailCounts() {
+    const recipients = $$("#ledger-email-recipients input:checked").length;
+    const entries = $$("#ledger-email-items input:checked").length;
+    $("#send-ledger-email").textContent = `Send ${entries} item${entries === 1 ? "" : "s"} to ${recipients} contact${recipients === 1 ? "" : "s"}`;
+  }
+
+  function setLedgerItemSelection(mode) {
+    const account = state.accounts.find(a => a.id === state.activeLedgerId);
+    const rows = ledgerEmailEntries(account);
+    $$("#ledger-email-items input").forEach(input => {
+      const entry = rows.find(row => row.id === input.value);
+      input.checked = mode === "all" || (mode === "outstanding" && entry?.entry_type === "charge" && chargeRemaining(entry) > 0);
+    });
+    updateLedgerEmailCounts();
+  }
+
   function composeLedgerBalanceEmail() {
     const account = state.accounts.find(a => a.id === state.activeLedgerId);
-    const { family, contact } = primaryFamilyContact(account);
-    if (!family || !(contact?.email || family.contact_email)) throw new Error("Add a family email address before sending balance details.");
-    openTab("communications");
-    const form = $("#email-form");
-    form.elements.message_type.value = "invoice";
+    const { family, contacts } = familyContacts(account);
+    const validContacts = contacts.filter(contact => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact.email || ""));
+    if (!family || !validContacts.length) throw new Error("Add a family email address before sending balance details.");
+    const rows = ledgerEmailEntries(account);
+    if (!rows.length) throw new Error("This family does not have any ledger items to email.");
+    $("#ledger-email-recipients").innerHTML = validContacts.map(contact => `<label class="ledger-email-option"><input type="checkbox" value="${esc(contact.id)}" ${contact.is_primary || validContacts.length === 1 ? "checked" : ""}><span><strong>${esc(contact.full_name)}</strong><small>${esc(contact.email)}${contact.relationship ? " · " + esc(contact.relationship) : ""}</small></span></label>`).join("");
+    $("#ledger-email-items").innerHTML = rows.map(entry => {
+      const outstanding = entry.entry_type === "charge" && chargeRemaining(entry) > 0;
+      return `<label class="ledger-email-option"><input type="checkbox" value="${esc(entry.id)}" ${outstanding ? "checked" : ""}><span><strong>${esc(entry.description)}</strong><small>${esc(entry.occurred_on)} · ${esc(accountName(entry.account_id))} · ${signedMoney(entry)}${outstanding ? " · " + money(chargeRemaining(entry)) + " outstanding" : ""}</small></span></label>`;
+    }).join("");
+    const form = $("#ledger-email-form");
     form.elements.subject.value = `Pack 3963 balance details — ${family.display_name}`;
-    form.elements.body_text.value = "Here are the current balance details for your Pack 3963 account. The email includes your current balance and recent account activity.\n\nPlease reply if you have a question or believe a payment is missing.";
-    $$("#email-family-options input[type='checkbox']").forEach(input => { input.checked = input.value === family.id; });
-    $("#email-family-options").dispatchEvent(new Event("change", { bubbles: true }));
+    form.elements.body_text.value = "Here are the selected details from your Pack 3963 family account. Please review the items below and contact us if a payment is missing or you have a question.\n\nThank you for supporting Pack 3963.";
+    status("", "", "#ledger-email-status");
+    form.hidden = false;
+    updateLedgerEmailCounts();
     form.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  async function sendLedgerBalanceEmail(form) {
+    if (!["admin", "treasurer"].includes(state.access?.role)) throw new Error("Your role cannot send family account email.");
+    const account = state.accounts.find(a => a.id === state.activeLedgerId);
+    const { family } = familyContacts(account);
+    if (!family) throw new Error("This family account could not be found.");
+    const contactIds = $$("#ledger-email-recipients input:checked").map(input => input.value);
+    const entryIds = $$("#ledger-email-items input:checked").map(input => input.value);
+    if (!contactIds.length) throw new Error("Select at least one parent or guardian.");
+    if (!entryIds.length) throw new Error("Select at least one ledger item.");
+    const session = (await client.auth.getSession()).data.session;
+    if (!session) throw new Error("Your session expired. Sign in again.");
+    const f = new FormData(form);
+    const response = await fetch(TREASURER_EMAIL_API, {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer " + session.access_token },
+      body: JSON.stringify({
+        household_ids: [family.id],
+        contact_ids: contactIds,
+        ledger_entry_ids: entryIds,
+        delivery_mode: "ledger",
+        message_type: "invoice",
+        subject: String(f.get("subject") || "").trim(),
+        body_text: String(f.get("body_text") || "").trim()
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Unable to send the family email.");
+    return data;
   }
 
   function chargeRemaining(charge) {
@@ -1041,7 +1166,17 @@
       catch (error) { status(error.message || "Unable to update the account.", "error"); }
     });
     $("#close-account-ledger").addEventListener("click", () => { $("#account-ledger").hidden = true; state.activeLedgerId = null; });
-    $("#edit-ledger-contact").addEventListener("click", () => { try { openLedgerContactForm(); } catch (error) { status(error.message, "error"); } });
+    $("#add-ledger-contact").addEventListener("click", () => { try { openLedgerContactForm(); } catch (error) { status(error.message, "error"); } });
+    $("#ledger-contact-list").addEventListener("click", async event => {
+      const edit = event.target.closest("[data-edit-family-contact]");
+      if (edit) { try { openLedgerContactForm(edit.dataset.editFamilyContact); } catch (error) { status(error.message, "error"); } return; }
+      const remove = event.target.closest("[data-remove-family-contact]");
+      if (!remove || !confirm("Remove this parent or guardian from the active family contacts? Existing email history will be kept.")) return;
+      remove.disabled = true;
+      try { await removeLedgerContact(remove.dataset.removeFamilyContact); status("Family contact removed.", "success"); }
+      catch (error) { status(error.message || "Unable to remove the contact.", "error"); }
+      finally { remove.disabled = false; }
+    });
     $("#cancel-ledger-contact").addEventListener("click", () => { $("#ledger-contact-form").hidden = true; });
     $("#ledger-contact-form").addEventListener("submit", async e => {
       e.preventDefault(); const button = e.currentTarget.querySelector("button[type=submit]"); button.disabled = true;
@@ -1051,6 +1186,24 @@
       finally { button.disabled = false; }
     });
     $("#email-account-balance").addEventListener("click", () => { try { composeLedgerBalanceEmail(); } catch (error) { status(error.message, "error"); } });
+    $("#close-ledger-email").addEventListener("click", () => { $("#ledger-email-form").hidden = true; });
+    $("#ledger-email-recipients").addEventListener("change", updateLedgerEmailCounts);
+    $("#ledger-email-items").addEventListener("change", updateLedgerEmailCounts);
+    $("#select-outstanding-ledger-items").addEventListener("click", () => setLedgerItemSelection("outstanding"));
+    $("#select-all-ledger-items").addEventListener("click", () => setLedgerItemSelection("all"));
+    $("#clear-ledger-items").addEventListener("click", () => setLedgerItemSelection("none"));
+    $("#ledger-email-form").addEventListener("submit", async event => {
+      event.preventDefault();
+      const form = event.currentTarget, button = $("#send-ledger-email");
+      if (button.disabled || !confirm("Send these balance details to the selected family contact(s)?")) return;
+      button.disabled = true;
+      status("Sending family balance email…", "", "#ledger-email-status");
+      try {
+        const result = await sendLedgerBalanceEmail(form);
+        status(`Sent to ${result.sent} contact${result.sent === 1 ? "" : "s"}.${result.failed ? " " + result.failed + " failed." : ""}`, result.failed ? "error" : "success", "#ledger-email-status");
+      } catch (error) { status(error.message || "Unable to send the family email.", "error", "#ledger-email-status"); }
+      finally { button.disabled = false; updateLedgerEmailCounts(); }
+    });
     $("#show-removed-ledger").addEventListener("change", () => { if (state.activeLedgerId) renderAccountLedger(state.activeLedgerId); });
     $("#ledger-account-filter").addEventListener("change", () => { if (state.activeLedgerId) renderAccountLedger(state.activeLedgerId); });
     $("#ledger-members").addEventListener("click", e => {
