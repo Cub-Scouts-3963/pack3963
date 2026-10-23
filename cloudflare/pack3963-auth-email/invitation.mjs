@@ -35,7 +35,7 @@ export function invitationEmail(user, support = "cubscouts3963@gmail.com") {
 <div style="display:none;max-height:0;overflow:hidden;">Your ${escape(role.label)} access is ready. Learn how to sign in and use the portal.</div>
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef3f8;"><tr><td align="center" style="padding:20px 12px;">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#fff;border-radius:12px;overflow:hidden;">
-<tr><td style="background:#004b8d;padding:24px;border-bottom:6px solid #f7c600;color:#fff;"><div style="font-size:25px;font-weight:bold;">Cub Scout Pack 3963</div><div style="font-size:16px;margin-top:6px;">Treasurer Portal</div></td></tr>
+<tr><td align="center" style="background:#004b8d;padding:22px 24px;border-bottom:6px solid #f7c600;color:#fff;"><img src="https://www.pack3963.com/assets/images/cubscoutlogo.png" width="170" alt="Cub Scout Pack 3963" style="display:block;width:170px;max-width:100%;height:auto;border:0;margin:0 auto 10px;"><div style="font-size:16px;font-weight:bold;">Treasurer Portal</div></td></tr>
 <tr><td style="padding:26px 24px;font-size:16px;line-height:1.6;">
 <p style="color:#b5161c;font-size:12px;font-weight:bold;letter-spacing:1px;margin:0;">YOUR PORTAL INVITATION</p>
 <h1 style="color:#004b8d;font-size:28px;line-height:1.2;margin:10px 0 20px;">Welcome to the Treasurer Portal</h1>
