@@ -1,5 +1,4 @@
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_I15v7OgXeqzJCCg-r7RwRw_ievTWP8V";
-const INVOICE_BASE_URL = "https://www.pack3963.com/invoice/";
 const ALLOWED_ORIGINS = ["https://pack3963.com", "https://www.pack3963.com", "https://pack3963.pages.dev"];
 
 export default {
@@ -102,20 +101,22 @@ async function createInvoiceRecord(env, token, values) {
     })
   });
   if (!created[0]?.id || !created[0]?.public_token) throw new Error("Invoice record was not created");
-  return { ...created[0], invoice_url: INVOICE_BASE_URL + "?token=" + encodeURIComponent(created[0].public_token) };
+  return { ...created[0], invoice_url: values.invoiceBaseUrl ? values.invoiceBaseUrl + "?token=" + encodeURIComponent(created[0].public_token) : null };
 }
 
 async function handleCreateInvoice(request, env) {
   try {
     const { token } = await authorize(request, env);
     const payload = await request.json();
+    const invoiceBaseUrl = await invoiceBaseUrlFor(request);
+    if (!invoiceBaseUrl) throw new HttpError("invoice_page_not_available", 503);
     const householdId = validUuid(payload.household_id) ? payload.household_id : "";
     const entryIds = uniqueUuids(payload.ledger_entry_ids, 100);
     const subject = String(payload.subject || "Pack 3963 family invoice").trim().slice(0, 180);
     const body = String(payload.body_text || "Please review the account details below.").trim().slice(0, 8000);
     if (!householdId || !entryIds.length || !subject || !body) throw new HttpError("missing_required_fields", 400);
     const context = await invoiceContext(env, token, householdId, entryIds, "ledger");
-    const invoice = await createInvoiceRecord(env, token, { ...context, subject, body, requestedDueDate: payload.due_date });
+    const invoice = await createInvoiceRecord(env, token, { ...context, subject, body, requestedDueDate: payload.due_date, invoiceBaseUrl });
     return corsResponse(request, { ok: true, invoice_id: invoice.id, invoice_number: invoice.invoice_number, due_date: invoice.due_date, invoice_url: invoice.invoice_url });
   } catch (error) {
     console.error(JSON.stringify({ event: "invoice_create_failed", reason: String(error.message || error) }));
@@ -127,6 +128,7 @@ async function handleTreasurerEmail(request, env) {
   try {
     const { token, user } = await authorize(request, env);
     const payload = await request.json();
+    const invoiceBaseUrl = await invoiceBaseUrlFor(request);
     const householdIds = uniqueUuids(payload.household_ids, 100);
     const contactIds = uniqueUuids(payload.contact_ids, 20);
     const entryIds = uniqueUuids(payload.ledger_entry_ids, 100);
@@ -150,7 +152,7 @@ async function handleTreasurerEmail(request, env) {
       if (!recipients.length) { skipped += mode === "ledger" ? contactIds.length : 1; continue; }
       let invoice = null;
       if (type === "invoice") {
-        invoice = await createInvoiceRecord(env, token, { ...context, messageId: message.id, subject, body, requestedDueDate: payload.due_date });
+        invoice = await createInvoiceRecord(env, token, { ...context, messageId: message.id, subject, body, requestedDueDate: payload.due_date, invoiceBaseUrl });
         invoiceIds.push(invoice.id); invoiceUrls.push(invoice.invoice_url);
       }
       for (const contact of recipients) {
@@ -194,6 +196,18 @@ export function invoiceDueDate(requested, activity, invoiceDate) {
   if (dueDates.length) return dueDates[dueDates.length - 1];
   const value = new Date(invoiceDate + "T12:00:00Z"); value.setUTCDate(value.getUTCDate() + 14);
   return value.toISOString().slice(0, 10);
+}
+
+async function invoiceBaseUrlFor(request) {
+  const origin = allowedOrigin(request);
+  if (!origin) return null;
+  const url = origin.replace(/\/$/, "") + "/invoice/";
+  try {
+    const response = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(5000) });
+    return response.ok ? url : null;
+  } catch {
+    return null;
+  }
 }
 
 function chicagoDate() {
