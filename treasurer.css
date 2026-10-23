@@ -85,3 +85,18 @@
 .field-help{margin:0;padding:11px 13px;border-left:4px solid var(--gold);background:#fff8d9;color:#33475b}
 @media(max-width:680px){.balance-reconciliation{grid-template-columns:1fr}}
 .audit-details{min-width:280px;max-width:520px;overflow-wrap:anywhere;color:#42576b;font-size:.88rem;line-height:1.45}
+
+
+.family-scout-list{display:flex;flex-wrap:wrap;gap:6px}
+.family-scout{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border-radius:999px;background:#eef5fb;color:#26384b}
+.family-scout small{color:#617488}
+.family-row-actions{display:flex;flex-wrap:wrap;gap:6px}
+.family-ledger-members{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin:0 0 16px}
+.family-member-balance{display:grid;gap:4px;padding:13px;text-align:left;border:1px solid #d8e0e8;border-radius:8px;background:#fff;color:#26384b;cursor:pointer}
+.family-member-balance:hover,.family-member-balance.is-selected{border-color:var(--blue);background:#eef5fb}
+.family-member-balance span{font-weight:800}
+.family-member-balance strong{font-size:1.2rem}
+.family-member-balance small{color:#617488}
+.ledger-account-filter{display:grid;gap:4px;min-width:190px;color:#33475b;font-size:.78rem;font-weight:800}
+.ledger-account-filter select{min-height:36px;padding:6px 9px;border:1px solid #aebac7;border-radius:6px;background:#fff;color:#26384b;font:inherit}
+@media(max-width:680px){.family-table-wrap table{min-width:850px}.family-ledger-members{grid-template-columns:1fr}.ledger-account-filter{width:100%}}
