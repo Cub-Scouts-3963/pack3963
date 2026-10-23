@@ -5,7 +5,7 @@
   const SUPABASE_KEY = "sb_publishable_I15v7OgXeqzJCCg-r7RwRw_ievTWP8V";
   const INVITATION_API = "https://pack3963-auth-email.cubscouts3963.workers.dev/api/treasurer/invite-user";
   const RECEIPT_DRIVE_SYNC_API = "https://pack3963-auth-email.cubscouts3963.workers.dev/api/treasurer/receipt-drive-sync";
-  const TREASURER_EMAIL_API = "https://pack3963-auth-email.cubscouts3963.workers.dev/api/treasurer/send-email";
+  const TREASURER_EMAIL_API = "https://pack3963-treasury-email.cubscouts3963.workers.dev/api/treasurer/send-email";
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: { persistSession: true, detectSessionInUrl: true, autoRefreshToken: true }
   });
