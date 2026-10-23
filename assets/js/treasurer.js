@@ -10,7 +10,7 @@
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: { persistSession: true, detectSessionInUrl: true, autoRefreshToken: true }
   });
-  const state = { user: null, access: null, accounts: [], entries: [], expenses: [], receipts: [], summary: null, users: [], audit: [], householdContacts: [], importRows: [], rosterRows: [], rosterHouseholds: [], rosterFileName: "", activeLedgerId: null };
+  const state = { user: null, access: null, accounts: [], entries: [], expenses: [], receipts: [], summary: null, users: [], audit: [], householdContacts: [], importRows: [], rosterRows: [], rosterHouseholds: [], rosterFileName: "", activeLedgerId: null, driveReviewStarted: false };
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => Array.from(document.querySelectorAll(selector));
   const today = () => new Date().toISOString().slice(0, 10);
@@ -66,6 +66,10 @@
     openTab("dashboard");
     setDefaults();
     await loadAll();
+    if (canWrite && !state.driveReviewStarted) {
+      state.driveReviewStarted = true;
+      await syncPendingDriveReceipts();
+    }
   }
 
   async function loadAll() {
