@@ -2,7 +2,7 @@
   "use strict";
   const SB_URL="https://buvrqioskjjhszqkpypa.supabase.co";
   const SB_KEY="sb_publishable_I15v7OgXeqzJCCg-r7RwRw_ievTWP8V";
-  const EMAIL_API="https://pack3963-auth-email.cubscouts3963.workers.dev/api/treasurer/send-email";
+  const EMAIL_API="https://pack3963-treasury-email.cubscouts3963.workers.dev/api/treasurer/send-email";
   const sb=window.supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:true,detectSessionInUrl:true,autoRefreshToken:true}});
   const state={accounts:[],campaigns:[],orders:[],entries:[],messages:[],recipients:[],contacts:[],access:null};
   const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
