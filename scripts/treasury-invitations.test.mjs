@@ -119,7 +119,8 @@ test("HTML escapes personalized content and all roles get accurate onboarding", 
   for (const role of ["admin", "treasurer", "viewer"]) {
     const email = invitationEmail({ ...recipient, role, display_name: '<img src=x onerror="alert(1)">' });
     assert.ok(email.html.includes("&lt;img"));
-    assert.doesNotMatch(email.html, /<img/);
+    assert.doesNotMatch(email.html, /<img src=x/);
+    assert.match(email.html, /cubscoutlogo\.png/);
     assert.match(email.html, /lang="en"/);
     assert.match(email.text, /There is no password/);
     assert.match(email.text, /Scouts & accounts:/);
