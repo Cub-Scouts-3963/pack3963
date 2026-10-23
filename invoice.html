@@ -1,97 +1,47 @@
 ---
-layout: null
+layout: default
 title: Pack 3963 Invoice
+description: Official Cub Scout Pack 3963 family invoice.
 permalink: /invoice/
-robots: noindex, nofollow
+robots: noindex, nofollow, noarchive
+styles:
+- /invoice.css
 ---
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="robots" content="noindex,nofollow,noarchive">
-  <meta name="referrer" content="no-referrer">
-  <title>Pack 3963 Invoice</title>
-  <link rel="stylesheet" href="{{ '/invoice.css' | relative_url }}?v={{ site.asset_version }}">
-</head>
-<body>
-  <main class="invoice-stage">
-    <div class="invoice-tools" id="invoice-tools" hidden>
-      <a href="{{ '/treasurer/' | relative_url }}" id="invoice-back">Back to family ledger</a>
-      <button type="button" id="invoice-print">Print / Save PDF</button>
-    </div>
-
-    <section class="invoice-loading" id="invoice-loading" role="status">Loading official invoice…</section>
-    <section class="invoice-error" id="invoice-error" role="alert" hidden>
-      <h1>Invoice unavailable</h1>
-      <p>This invoice link is invalid or the invoice is no longer available. Contact <a href="mailto:cubscouts3963@gmail.com">cubscouts3963@gmail.com</a> for help.</p>
+<main class="invoice-stage">
+  <div class="invoice-tools" id="invoice-tools" hidden>
+    <a href="{{ '/treasurer/' | relative_url }}" id="invoice-back">Back to family ledger</a>
+    <button type="button" id="invoice-print">Print / Save PDF</button>
+  </div>
+  <section class="invoice-loading" id="invoice-loading" role="status">Loading official invoice…</section>
+  <section class="invoice-error" id="invoice-error" role="alert" hidden>
+    <h1>Invoice unavailable</h1>
+    <p>This invoice link is invalid or the invoice is no longer available. Contact <a href="mailto:cubscouts3963@gmail.com">cubscouts3963@gmail.com</a> for help.</p>
+  </section>
+  <article class="invoice" id="invoice" hidden>
+    <header class="invoice-header">
+      <img src="{{ '/assets/images/cubscoutlogo.png' | relative_url }}" alt="Pack 3963 logo">
+      <div class="invoice-brand">
+        <p class="invoice-kicker">Cub Scout Pack 3963</p><h1>Pack 3963</h1>
+        <p>Pathway to Adventure Council • Scouting America</p><p>c/o Eden United Church of Christ</p>
+        <p>5051 W. Gunnison Street • Chicago, IL 60630</p>
+        <p><a href="mailto:cubscouts3963@gmail.com">cubscouts3963@gmail.com</a> • <a href="https://www.pack3963.com">pack3963.com</a></p>
+      </div>
+      <div class="invoice-title"><strong>INVOICE</strong><dl>
+        <div><dt>Invoice #</dt><dd id="invoice-number"></dd></div><div><dt>Issued</dt><dd id="invoice-issued"></dd></div><div><dt>Due</dt><dd id="invoice-due"></dd></div>
+      </dl></div>
+    </header>
+    <section class="invoice-addresses">
+      <div><span class="invoice-label">Bill to</span><strong id="invoice-bill-to"></strong><p id="invoice-family"></p><p id="invoice-scouts"></p></div>
+      <div class="charter-block"><span class="invoice-label">Chartered organization</span><strong>Eden United Church of Christ</strong><p>5051 W. Gunnison Street</p><p>Chicago, IL 60630</p></div>
     </section>
-
-    <article class="invoice" id="invoice" hidden>
-      <header class="invoice-header">
-        <img src="{{ '/assets/images/cubscoutlogo.png' | relative_url }}" alt="Pack 3963 logo">
-        <div class="invoice-brand">
-          <p class="invoice-kicker">Cub Scout Pack 3963</p>
-          <h1>Pack 3963</h1>
-          <p>Pathway to Adventure Council • Scouting America</p>
-          <p>c/o Eden United Church of Christ</p>
-          <p>5051 W. Gunnison Street • Chicago, IL 60630</p>
-          <p><a href="mailto:cubscouts3963@gmail.com">cubscouts3963@gmail.com</a> • <a href="https://www.pack3963.com">pack3963.com</a></p>
-        </div>
-        <div class="invoice-title">
-          <strong>INVOICE</strong>
-          <dl>
-            <div><dt>Invoice #</dt><dd id="invoice-number"></dd></div>
-            <div><dt>Issued</dt><dd id="invoice-issued"></dd></div>
-            <div><dt>Due</dt><dd id="invoice-due"></dd></div>
-          </dl>
-        </div>
-      </header>
-
-      <section class="invoice-addresses">
-        <div>
-          <span class="invoice-label">Bill to</span>
-          <strong id="invoice-bill-to"></strong>
-          <p id="invoice-family"></p>
-          <p id="invoice-scouts"></p>
-        </div>
-        <div class="charter-block">
-          <span class="invoice-label">Chartered organization</span>
-          <strong>Eden United Church of Christ</strong>
-          <p>5051 W. Gunnison Street</p>
-          <p>Chicago, IL 60630</p>
-        </div>
-      </section>
-
-      <p class="invoice-message" id="invoice-message"></p>
-
-      <table class="invoice-items">
-        <thead><tr><th>Date</th><th>Description</th><th>Account</th><th class="amount">Amount</th></tr></thead>
-        <tbody id="invoice-items"></tbody>
-      </table>
-
-      <section class="invoice-totals">
-        <dl>
-          <div><dt>Charges</dt><dd id="invoice-charges"></dd></div>
-          <div><dt>Payments / credits</dt><dd id="invoice-credits"></dd></div>
-          <div class="balance"><dt>Balance due</dt><dd id="invoice-balance"></dd></div>
-        </dl>
-      </section>
-
-      <section class="payment-box">
-        <h2>Payment instructions</h2>
-        <p>Pay with cash at a Pack meeting or send Zelle to <strong id="invoice-payment"></strong> (Kevin Goldsmith, Pack Treasurer).</p>
-        <p>Please include the Scout or family name and invoice number <strong id="invoice-payment-number"></strong> in the payment memo.</p>
-      </section>
-
-      <p class="invoice-help">Questions? Contact <a id="invoice-support" href="mailto:cubscouts3963@gmail.com">cubscouts3963@gmail.com</a>.</p>
-    </article>
-  </main>
-
-  <footer class="invoice-print-footer">
-    <span>Cub Scout Pack 3963 • c/o Eden United Church of Christ • 5051 W. Gunnison Street, Chicago, IL 60630</span>
-    <span>Pathway to Adventure Council • Scouting America</span>
-  </footer>
-  <script src="{{ '/assets/js/invoice.js' | relative_url }}?v={{ site.asset_version }}"></script>
-</body>
-</html>
+    <p class="invoice-message" id="invoice-message"></p>
+    <table class="invoice-items"><thead><tr><th>Date</th><th>Description</th><th>Account</th><th class="amount">Amount</th></tr></thead><tbody id="invoice-items"></tbody></table>
+    <section class="invoice-totals"><dl>
+      <div><dt>Charges</dt><dd id="invoice-charges"></dd></div><div><dt>Payments / credits</dt><dd id="invoice-credits"></dd></div><div class="balance"><dt>Balance due</dt><dd id="invoice-balance"></dd></div>
+    </dl></section>
+    <section class="payment-box"><h2>Payment instructions</h2><p>Pay with cash at a Pack meeting or send Zelle to <strong id="invoice-payment"></strong> (Kevin Goldsmith, Pack Treasurer).</p><p>Please include the Scout or family name and invoice number <strong id="invoice-payment-number"></strong> in the payment memo.</p></section>
+    <p class="invoice-help">Questions? Contact <a id="invoice-support" href="mailto:cubscouts3963@gmail.com">cubscouts3963@gmail.com</a>.</p>
+  </article>
+</main>
+<footer class="invoice-print-footer"><span>Cub Scout Pack 3963 • c/o Eden United Church of Christ • 5051 W. Gunnison Street, Chicago, IL 60630</span><span>Pathway to Adventure Council • Scouting America</span></footer>
+<script src="{{ '/assets/js/invoice.js' | relative_url }}?v={{ site.asset_version }}"></script>
