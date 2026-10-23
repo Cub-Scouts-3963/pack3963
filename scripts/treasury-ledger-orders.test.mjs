@@ -34,3 +34,16 @@ test("failed payment insert keeps the form open and preserves its retry ID",asyn
 function orders(){const s=setup("treasurer-orders.js","state,filteredOrders,renderOrders,printOrders");s.state.orders=[{id:"a",campaign_id:"shirts",campaign_name:"Shirts",account_name:"Example Scout",quantity:2,total_cents:2000},{id:"b",campaign_id:"camp",campaign_name:"Camp",account_name:"Other Scout",quantity:1,total_cents:3000}];s.state.entries=[{order_item_id:"a",entry_type:"charge",amount_cents:2000},{order_item_id:"a",entry_type:"payment",amount_cents:1000},{order_item_id:"b",entry_type:"charge",amount_cents:3000}];s.element("#order-name-filter").value="all";return s}
 test("order name, status and search filters combine",()=>{const s=orders();s.element("#order-name-filter").value="shirts";s.element("#order-status-filter").value="partial";s.element("#order-search").value="Example";assert.equal(s.filteredOrders().length,1);s.element("#order-status-filter").value="paid";assert.equal(s.filteredOrders().length,0);s.renderOrders();assert.equal(s.element("#print-filtered-orders").disabled,true)});
 test("printing includes only filtered table rows and matching totals",()=>{const s=orders();s.element("#order-name-filter").value="shirts";s.element("#order-search").value="<example>";s.element("#order-search").value="Example";s.element("#orders-table").closest=()=>({outerHTML:s.element("#orders-table").innerHTML});s.printOrders();assert.match(s.printed[0],/Shirts/);assert.doesNotMatch(s.printed[0],/Other Scout/);assert.match(s.printed[0],/1 order rows · 2 items/);assert.match(s.printed[0],/Total \$20.00 · Amount due \$10.00/)});
+
+
+function families() {
+  const s=setup("treasurer.js","state,familyGroups,filteredAccounts");
+  const family={id:"family-a",display_name:"Example family",account_type:"household",active:true,balance_cents:4000};
+  const scout={id:"scout-a",display_name:"Alex Example",account_type:"scout",parent_account_id:family.id,den:"Wolf",active:true,balance_cents:5000};
+  s.state.accounts=[family,scout];
+  s.state.householdContacts=[{household_account_id:family.id,full_name:"Pat Example",email:"parent@example.com",active:true,is_primary:true}];
+  s.element("#balance-filter").value="current";
+  return s;
+}
+test("family view rolls household and Scout balances into one row",()=>{const s=families();const groups=s.familyGroups();assert.equal(groups.length,1);assert.equal(groups[0].scouts[0].display_name,"Alex Example");assert.equal(groups[0].balance_cents,9000)});
+test("searching a Scout name returns the linked family",()=>{const s=families();s.element("#account-search").value="Alex";const rows=s.filteredAccounts();assert.equal(rows.length,1);assert.equal(rows[0].family.display_name,"Example family")});

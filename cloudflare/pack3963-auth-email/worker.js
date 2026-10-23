@@ -10,6 +10,7 @@ const ACTIONS = {
 const DEFAULT_COPY = ACTIONS.magiclink;
 const MAX_BODY = 65536;
 const SKEW = 300;
+const RECEIPT_SYNC_PATH = "/api/treasurer/receipt-drive-sync";
 
 export default {
   async fetch(request, env) {
@@ -20,6 +21,11 @@ export default {
     if (url.pathname === "/api/treasurer/invite-user") {
       if (request.method === "OPTIONS") return corsResponse(request, null, 204);
       if (request.method === "POST") return handleUserInvitation(request, env);
+      return corsResponse(request, { error: "method_not_allowed" }, 405);
+    }
+    if (url.pathname === RECEIPT_SYNC_PATH) {
+      if (request.method === "OPTIONS") return corsResponse(request, null, 204);
+      if (request.method === "POST") return handleReceiptDriveSync(request, env);
       return corsResponse(request, { error: "method_not_allowed" }, 405);
     }
     if (request.method === "OPTIONS" && url.pathname === "/api/treasurer/send-email") return corsResponse(request, null, 204);
@@ -161,6 +167,272 @@ async function sbFetch(env,token,path,init={}) {
   if(!r.ok) throw new Error(d?.message||"Database request failed");
   return d;
 }
+
+async function activeTreasuryUser(request, env) {
+  const authorization = request.headers.get("authorization") || "";
+  const token = authorization.replace(/^Bearer\s+/i, "");
+  if (!token) return { error: "Your session expired. Sign in again.", status: 401 };
+  const response = await fetch(env.SUPABASE_URL + "/auth/v1/user", {
+    headers: { apikey: SUPABASE_PUBLISHABLE_KEY, authorization: "Bearer " + token },
+    signal: AbortSignal.timeout(10000)
+  });
+  if (!response.ok) return { error: "Your session expired. Sign in again.", status: 401 };
+  const user = await response.json();
+  const access = await sbFetch(env, token, "authorized_users?select=role,active&email=eq." + encodeURIComponent(String(user.email || "").toLowerCase()) + "&active=eq.true");
+  if (!access.length || !["admin", "treasurer"].includes(access[0].role)) {
+    return { error: "Only an active administrator or treasurer can synchronize receipts.", status: 403 };
+  }
+  return { token, user, role: access[0].role };
+}
+
+async function handleReceiptDriveSync(request, env) {
+  if (!allowedOrigin(request)) return corsResponse(request, { error: "origin_not_allowed" }, 403);
+  try {
+    const actor = await activeTreasuryUser(request, env);
+    if (actor.error) return corsResponse(request, { error: actor.error }, actor.status);
+    const statedLength = Number(request.headers.get("content-length") || 0);
+    if (statedLength > 4096) return corsResponse(request, { error: "Receipt sync request is too large." }, 413);
+    const payload = await request.json();
+    const receiptId = validUuid(payload?.receipt_id) ? payload.receipt_id : null;
+    const expenseId = validUuid(payload?.expense_id) ? payload.expense_id : null;
+    const syncPending = payload?.sync_pending === true;
+    if (!receiptId && !expenseId && !syncPending) return corsResponse(request, { error: "Choose a receipt, expense, or the pending queue." }, 400);
+
+    const filters = receiptId
+      ? "id=eq." + receiptId
+      : expenseId
+        ? "expense_id=eq." + expenseId
+        : "drive_sync_status=in.(pending,error)";
+    const receipts = await sbFetch(env, actor.token, "expense_receipts?select=*&" + filters + "&order=created_at.asc&limit=25");
+    if (!receipts.length) return corsResponse(request, { ok: true, synced: 0, failed: 0, results: [] });
+
+    const accessToken = await googleAccessToken(env);
+    const results = [];
+    for (const receipt of receipts) {
+      try {
+        const result = await syncReceiptToDrive(env, actor.token, accessToken, receipt);
+        results.push({ receipt_id: receipt.id, ok: true, ...result });
+      } catch (error) {
+        const message = publicDriveError(error);
+        await updateReceiptSync(env, actor.token, receipt.id, {
+          drive_sync_status: "error",
+          drive_sync_error: message,
+          drive_last_attempt_at: new Date().toISOString()
+        });
+        console.warn(JSON.stringify({ event: "receipt_drive_sync_failed", receipt_id: receipt.id, reason: message }));
+        results.push({ receipt_id: receipt.id, ok: false, error: message });
+      }
+    }
+    const synced = results.filter(item => item.ok).length;
+    const failed = results.length - synced;
+    console.log(JSON.stringify({ event: "receipt_drive_sync_complete", requested: results.length, synced, failed }));
+    return corsResponse(request, { ok: failed === 0, synced, failed, results }, failed === results.length ? 502 : 200);
+  } catch (error) {
+    const message = publicDriveError(error);
+    console.error(JSON.stringify({ event: "receipt_drive_sync_failed", reason: message }));
+    return corsResponse(request, { error: message }, 500);
+  }
+}
+
+async function syncReceiptToDrive(env, token, accessToken, receipt) {
+  await updateReceiptSync(env, token, receipt.id, {
+    drive_sync_status: "syncing",
+    drive_sync_error: null,
+    drive_last_attempt_at: new Date().toISOString()
+  });
+  const expenses = await sbFetch(env, token, "expenses?select=id,purchased_on,vendor,category,amount_cents,description,voided_at&id=eq." + receipt.expense_id + "&limit=1");
+  const expense = expenses[0];
+  if (!expense) throw new Error("The linked expense no longer exists.");
+  if (expense.voided_at) throw new Error("Restore the removed expense before synchronizing its receipt.");
+
+  const folderName = driveFolderName(expense.purchased_on);
+  const folderId = await findOrCreateDriveFolder(env, accessToken, folderName);
+  let filename = driveReceiptFilename(expense, receipt);
+  let driveFile;
+  if (receipt.drive_file_id) {
+    try {
+      driveFile = await updateDriveFile(accessToken, receipt.drive_file_id, filename, folderId, receipt.drive_folder_id);
+    } catch (error) {
+      if (error.status !== 404) throw error;
+      filename = await uniqueDriveFilename(accessToken, folderId, filename);
+      const stored = await fetchStoredReceipt(env, token, receipt.storage_path);
+      driveFile = await uploadDriveFile(accessToken, stored, filename, folderId, receipt.content_type, receipt.size_bytes);
+    }
+  } else {
+    filename = await uniqueDriveFilename(accessToken, folderId, filename);
+    const stored = await fetchStoredReceipt(env, token, receipt.storage_path);
+    driveFile = await uploadDriveFile(accessToken, stored, filename, folderId, receipt.content_type, receipt.size_bytes);
+  }
+  const syncedAt = new Date().toISOString();
+  await updateReceiptSync(env, token, receipt.id, {
+    drive_file_id: driveFile.id,
+    drive_folder_id: folderId,
+    drive_filename: driveFile.name || filename,
+    drive_web_view_link: driveFile.webViewLink || null,
+    drive_sync_status: "synced",
+    drive_sync_error: null,
+    drive_last_attempt_at: syncedAt,
+    drive_synced_at: syncedAt
+  });
+  return { drive_file_id: driveFile.id, drive_filename: driveFile.name || filename, folder_name: folderName };
+}
+
+async function googleAccessToken(env) {
+  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET || !env.GOOGLE_REFRESH_TOKEN || !env.GOOGLE_DRIVE_ROOT_FOLDER_ID) {
+    throw new Error("Google Drive synchronization is not configured yet.");
+  }
+  const body = new URLSearchParams({
+    client_id: env.GOOGLE_CLIENT_ID,
+    client_secret: env.GOOGLE_CLIENT_SECRET,
+    refresh_token: env.GOOGLE_REFRESH_TOKEN,
+    grant_type: "refresh_token"
+  });
+  const response = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body,
+    signal: AbortSignal.timeout(15000)
+  });
+  const result = await response.json();
+  if (!response.ok || !result.access_token) throw new Error("Google authorization needs to be reconnected.");
+  return result.access_token;
+}
+
+async function findOrCreateDriveFolder(env, accessToken, folderName) {
+  const rootId = String(env.GOOGLE_DRIVE_ROOT_FOLDER_ID);
+  const escapedName = folderName.replace(/'/g, "\\'");
+  const q = `'${rootId}' in parents and name = '${escapedName}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`;
+  const search = await googleFetch("https://www.googleapis.com/drive/v3/files?spaces=drive&pageSize=10&fields=files(id,name)&q=" + encodeURIComponent(q), accessToken);
+  if (search.files?.length) return search.files[0].id;
+  const created = await googleFetch("https://www.googleapis.com/drive/v3/files?fields=id,name", accessToken, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: folderName, mimeType: "application/vnd.google-apps.folder", parents: [rootId] })
+  });
+  return created.id;
+}
+
+async function fetchStoredReceipt(env, token, storagePath) {
+  const path = String(storagePath || "").split("/").map(encodeURIComponent).join("/");
+  const response = await fetch(env.SUPABASE_URL + "/storage/v1/object/authenticated/pack-receipts/" + path, {
+    headers: { apikey: SUPABASE_PUBLISHABLE_KEY, authorization: "Bearer " + token },
+    signal: AbortSignal.timeout(30000)
+  });
+  if (!response.ok || !response.body) throw new Error("The private Supabase receipt could not be downloaded.");
+  return response;
+}
+
+async function uploadDriveFile(accessToken, stored, filename, folderId, contentType, sizeBytes) {
+  const type = contentType || stored.headers.get("content-type") || "application/octet-stream";
+  const length = Number(sizeBytes || stored.headers.get("content-length") || 0);
+  if (!Number.isFinite(length) || length <= 0 || length > 10485760) throw new Error("Receipt size is invalid or exceeds 10 MB.");
+  const start = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id,name,webViewLink,parents", {
+    method: "POST",
+    headers: {
+      authorization: "Bearer " + accessToken,
+      "content-type": "application/json; charset=UTF-8",
+      "x-upload-content-type": type,
+      "x-upload-content-length": String(length)
+    },
+    body: JSON.stringify({ name: filename, parents: [folderId] }),
+    signal: AbortSignal.timeout(15000)
+  });
+  if (!start.ok) throw new Error("Google Drive rejected the receipt upload.");
+  const location = start.headers.get("location");
+  if (!location) throw new Error("Google Drive did not provide an upload location.");
+  const uploaded = await fetch(location, {
+    method: "PUT",
+    headers: { "content-type": type, "content-length": String(length) },
+    body: stored.body,
+    signal: AbortSignal.timeout(60000)
+  });
+  if (!uploaded.ok) throw new Error("Google Drive could not finish the receipt upload.");
+  return uploaded.json();
+}
+
+async function updateDriveFile(accessToken, fileId, filename, folderId, previousFolderId) {
+  const url = new URL("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(fileId));
+  url.searchParams.set("fields", "id,name,webViewLink,parents");
+  if (folderId && folderId !== previousFolderId) url.searchParams.set("addParents", folderId);
+  if (previousFolderId && folderId !== previousFolderId) url.searchParams.set("removeParents", previousFolderId);
+  return googleFetch(url.toString(), accessToken, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: filename })
+  });
+}
+
+async function uniqueDriveFilename(accessToken, folderId, filename) {
+  const dot = filename.lastIndexOf(".");
+  const stem = dot > 0 ? filename.slice(0, dot) : filename;
+  const extension = dot > 0 ? filename.slice(dot) : "";
+  const escapedStem = stem.replace(/'/g, "\\'");
+  const q = `'${folderId}' in parents and name contains '${escapedStem}' and trashed = false`;
+  const result = await googleFetch("https://www.googleapis.com/drive/v3/files?spaces=drive&pageSize=100&fields=files(name)&q=" + encodeURIComponent(q), accessToken);
+  const names = new Set((result.files || []).map(file => file.name));
+  if (!names.has(filename)) return filename;
+  for (let number = 2; number <= 100; number++) {
+    const candidate = `${stem} (${number})${extension}`;
+    if (!names.has(candidate)) return candidate;
+  }
+  throw new Error("Too many receipts have the same generated filename.");
+}
+
+async function googleFetch(url, accessToken, init = {}) {
+  const headers = new Headers(init.headers || {});
+  headers.set("authorization", "Bearer " + accessToken);
+  const response = await fetch(url, { ...init, headers, signal: init.signal || AbortSignal.timeout(15000) });
+  const result = await response.json();
+  if (!response.ok) {
+    const error = new Error(result?.error?.message || "Google Drive request failed.");
+    error.status = response.status;
+    throw error;
+  }
+  return result;
+}
+
+async function updateReceiptSync(env, token, receiptId, values) {
+  await sbFetch(env, token, "expense_receipts?id=eq." + receiptId, {
+    method: "PATCH",
+    headers: { prefer: "return=minimal" },
+    body: JSON.stringify(values)
+  });
+}
+
+function validUuid(value) {
+  return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+export function driveFolderName(purchasedOn) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(purchasedOn || ""))) throw new Error("The expense needs a valid purchase date.");
+  const date = new Date(String(purchasedOn) + "T12:00:00Z");
+  if (Number.isNaN(date.valueOf())) throw new Error("The expense needs a valid purchase date.");
+  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(date);
+}
+
+export function driveReceiptFilename(expense, receipt) {
+  const original = String(receipt?.original_filename || "receipt");
+  const extensionMatch = original.match(/\.[a-zA-Z0-9]{1,8}$/);
+  const extension = extensionMatch ? extensionMatch[0].toLowerCase() : extensionForType(receipt?.content_type);
+  const vendor = cleanDriveName(expense?.vendor || "Unknown vendor");
+  const category = cleanDriveName(expense?.category || expense?.description || "Expense");
+  const amount = ((Number(expense?.amount_cents) || 0) / 100).toFixed(2);
+  return cleanDriveName(`${expense?.purchased_on || "Undated"} - ${vendor} - ${category} - $${amount}`) + extension;
+}
+
+function cleanDriveName(value) {
+  return String(value).replace(/[\\/:*?"<>|\u0000-\u001f]/g, "-").replace(/\s+/g, " ").replace(/\s*-\s*-+/g, " - ").trim().slice(0, 180) || "Receipt";
+}
+
+function extensionForType(type) {
+  return ({ "application/pdf": ".pdf", "image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp" })[type] || ".bin";
+}
+
+function publicDriveError(error) {
+  const message = String(error?.message || error || "Receipt synchronization failed.");
+  if (/authorization|configured|purchase date|expense|receipt|Google Drive|10 MB|Supabase/i.test(message)) return message.slice(0, 300);
+  return "Receipt synchronization failed. Try again or reconnect Google Drive.";
+}
 async function handleTreasurerEmail(request,env) {
   if(!allowedOrigin(request)) return corsResponse(request,{error:"origin_not_allowed"},403);
   const token=(request.headers.get("authorization")||"").replace(/^Bearer\s+/i,"");
@@ -172,25 +444,43 @@ async function handleTreasurerEmail(request,env) {
     const access=await sbFetch(env,token,"authorized_users?select=email,role,active&email=eq."+encodeURIComponent(String(user.email||"").toLowerCase())+"&active=eq.true");
     if(!access.length||!["admin","treasurer"].includes(access[0].role)) return corsResponse(request,{error:"not_authorized"},403);
     const p=await request.json();
-    const ids=[...new Set(Array.isArray(p.household_ids)?p.household_ids:[])].filter(v=>/^[0-9a-f-]{36}$/i.test(v)).slice(0,100);
+    const uuid=v=>/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+    const ids=[...new Set(Array.isArray(p.household_ids)?p.household_ids:[])].filter(uuid).slice(0,100);
+    const contactIds=[...new Set(Array.isArray(p.contact_ids)?p.contact_ids:[])].filter(uuid).slice(0,20);
+    const entryIds=[...new Set(Array.isArray(p.ledger_entry_ids)?p.ledger_entry_ids:[])].filter(uuid).slice(0,100);
+    const mode=p.delivery_mode==="ledger"?"ledger":"bulk";
     const type=p.message_type==="custom"?"custom":"invoice", subject=String(p.subject||"").trim().slice(0,180), body=String(p.body_text||"").trim().slice(0,8000);
     if(!ids.length||!subject||!body) return corsResponse(request,{error:"missing_required_fields"},400);
+    if(mode==="ledger"&&(ids.length!==1||!contactIds.length||!entryIds.length||type!=="invoice")) return corsResponse(request,{error:"select_recipients_and_ledger_items"},400);
     const made=await sbFetch(env,token,"email_messages",{method:"POST",headers:{prefer:"return=representation"},body:JSON.stringify({message_type:type,subject,body_text:body,status:"sending",sent_by_email:user.email,recipient_count:0})});
     const message=made[0]; let sent=0,failed=0,skipped=0;
     for(const hid of ids) {
       const hs=await sbFetch(env,token,"financial_accounts?select=id,display_name&id=eq."+hid+"&account_type=eq.household&active=eq.true");
       if(!hs.length){skipped++;continue}
-      const cs=await sbFetch(env,token,"household_contacts?select=full_name,email,is_primary&household_account_id=eq."+hid+"&active=eq.true&email=not.is.null&order=is_primary.desc");
-      const c=cs.find(x=>validEmail(x.email)); if(!c){skipped++;continue}
-      const bs=await sbFetch(env,token,"account_balances?select=id,balance_cents&or=(id.eq."+hid+",parent_account_id.eq."+hid+")");
-      const due=bs.reduce((n,x)=>n+Math.max(0,Number(x.balance_cents||0)),0);
-      let provider=null,rs="failed",err=null;
-      try {
-        const rr=await fetch("https://api.resend.com/emails",{method:"POST",headers:{authorization:"Bearer "+env.RESEND_API_KEY,"content-type":"application/json","idempotency-key":message.id+":"+hid},body:JSON.stringify({from:env.FROM_EMAIL,to:[c.email],subject,html:treasurerHtml(hs[0].display_name,subject,body,type==="invoice"?due:null,env.SUPPORT_EMAIL),text:treasurerText(hs[0].display_name,body,type==="invoice"?due:null,env.SUPPORT_EMAIL),reply_to:env.SUPPORT_EMAIL})});
-        const rd=await rr.json(); if(!rr.ok) throw new Error(rd?.message||"Email provider rejected the message");
-        provider=rd.id||null;rs="sent";sent++;
-      } catch(e){err=String(e.message||e).slice(0,500);failed++}
-      await sbFetch(env,token,"email_recipients",{method:"POST",headers:{prefer:"return=minimal"},body:JSON.stringify({message_id:message.id,household_account_id:hid,recipient_name:c.full_name,recipient_email:c.email,provider_message_id:provider,status:rs,error_message:err,sent_at:rs==="sent"?new Date().toISOString():null})});
+      const cs=await sbFetch(env,token,"household_contacts?select=id,full_name,email,relationship,is_primary&household_account_id=eq."+hid+"&active=eq.true&email=not.is.null&order=is_primary.desc");
+      const recipients=cs.filter(c=>validEmail(c.email)&&(mode!=="ledger"||contactIds.includes(c.id)));
+      if(!recipients.length){skipped+=mode==="ledger"?contactIds.length:1;continue}
+      const bs=await sbFetch(env,token,"account_balances?select=id,display_name,balance_cents&or=(id.eq."+hid+",parent_account_id.eq."+hid+")");
+      const due=Math.max(0,bs.reduce((n,x)=>n+Number(x.balance_cents||0),0));
+      const accountIds=bs.map(x=>x.id).filter(uuid);
+      const accountNames=Object.fromEntries(bs.map(x=>[x.id,x.display_name]));
+      let activity=[];
+      if(type==="invoice"&&accountIds.length) {
+        const filter=mode==="ledger"
+          ?"id=in.("+entryIds.join(",")+")&account_id=in.("+accountIds.join(",")+")"
+          :"voided_at=is.null&account_id=in.("+accountIds.join(",")+")&limit=50";
+        activity=(await sbFetch(env,token,"ledger_entries?select=id,account_id,entry_type,amount_cents,occurred_on,description,category&"+filter+"&order=occurred_on.desc")).map(x=>({...x,account_name:accountNames[x.account_id]||"Pack account"}));
+      }
+      if(mode==="ledger"&&activity.length!==entryIds.length){skipped+=recipients.length;continue}
+      for(const c of recipients) {
+        let provider=null,rs="failed",err=null;
+        try {
+          const rr=await fetch("https://api.resend.com/emails",{method:"POST",headers:{authorization:"Bearer "+env.RESEND_API_KEY,"content-type":"application/json","idempotency-key":message.id+":"+hid+":"+c.id},body:JSON.stringify({from:env.FROM_EMAIL,to:[c.email],subject,html:treasurerHtml(c.full_name,hs[0].display_name,subject,body,type==="invoice"?due:null,activity,env.SUPPORT_EMAIL,type==="invoice"?env.ZELLE_PAYMENT_INFO:null,mode),text:treasurerText(c.full_name,hs[0].display_name,body,type==="invoice"?due:null,activity,env.SUPPORT_EMAIL,type==="invoice"?env.ZELLE_PAYMENT_INFO:null,mode),reply_to:env.SUPPORT_EMAIL})});
+          const rd=await rr.json(); if(!rr.ok) throw new Error(rd?.message||"Email provider rejected the message");
+          provider=rd.id||null;rs="sent";sent++;
+        } catch(e){err=String(e.message||e).slice(0,500);failed++}
+        await sbFetch(env,token,"email_recipients",{method:"POST",headers:{prefer:"return=minimal"},body:JSON.stringify({message_id:message.id,household_account_id:hid,recipient_name:c.full_name,recipient_email:c.email,provider_message_id:provider,status:rs,error_message:err,sent_at:rs==="sent"?new Date().toISOString():null})});
+      }
     }
     const final=sent&&!failed&&!skipped?"sent":sent?"partial":"failed";
     await sbFetch(env,token,"email_messages?id=eq."+message.id,{method:"PATCH",headers:{prefer:"return=minimal"},body:JSON.stringify({status:final,recipient_count:sent,sent_at:new Date().toISOString()})});
@@ -198,12 +488,25 @@ async function handleTreasurerEmail(request,env) {
   } catch(e){console.error(JSON.stringify({event:"treasurer_email_failed",reason:String(e.message||e)}));return corsResponse(request,{error:String(e.message||"Unable to send email")},500)}
 }
 function fmtMoney(v){return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format((Number(v)||0)/100)}
-function treasurerHtml(family,subject,body,due,support){
-  const ps=String(body).split(/\n{2,}/).map(p=>"<p style='font-size:16px;line-height:1.6;margin:0 0 16px'>"+esc(p).replace(/\n/g,"<br>")+"</p>").join("");
-  const bal=due==null?"":"<div style='margin:20px 0;padding:18px;background:#f4f8fc;border-left:5px solid #d71920;border-radius:7px'><div style='font-size:13px;font-weight:800;color:#526474'>CURRENT PACK BALANCE DUE</div><div style='font-size:30px;font-weight:800;color:#004b8d;margin-top:4px'>"+fmtMoney(due)+"</div></div>";
-  return "<!doctype html><html><body style='margin:0;background:#eef3f8;color:#243447;font-family:Arial,Helvetica,sans-serif'><table width='100%' role='presentation' style='padding:24px 12px'><tr><td align='center'><table width='100%' role='presentation' style='max-width:620px;background:#fff;border-radius:15px;overflow:hidden'><tr><td style='background:#004b8d;padding:26px 30px;border-bottom:8px solid #f7c600;color:#fff'><div style='font-size:25px;font-weight:800'>Cub Scout Pack 3963</div><div style='color:#d9ecff;margin-top:5px'>Pack Treasurer</div></td></tr><tr><td style='padding:30px'><div style='color:#d71920;font-size:12px;font-weight:800;letter-spacing:1px'>PACK ACCOUNT</div><h1 style='color:#004b8d;font-size:25px;margin:8px 0 18px'>"+esc(subject)+"</h1><p style='font-size:16px;line-height:1.6'>Hello "+esc(family)+",</p>"+ps+bal+"<p style='font-size:13px;color:#607284;margin-top:24px'>Questions? Reply or contact <a href='mailto:"+esc(support)+"'>"+esc(support)+"</a>.</p></td></tr><tr><td style='background:#003f75;color:#d9ecff;padding:17px 30px;font-size:12px'>Cub Scout Pack 3963 · Chicago, Illinois</td></tr></table></td></tr></table></body></html>"
+function activityAmount(entry){return (entry.entry_type==="charge"?1:-1)*Number(entry.amount_cents||0)}
+function treasurerActivityHtml(activity,mode){
+  if(!activity?.length)return "";
+  const rows=activity.map(x=>"<tr><td style='padding:9px 8px;border-bottom:1px solid #d8e0e8;font-size:13px'>"+esc(x.occurred_on)+"</td><td style='padding:9px 8px;border-bottom:1px solid #d8e0e8;font-size:13px'><strong>"+esc(x.description)+"</strong><br><span style='color:#607284'>"+esc(x.account_name)+(x.category?" · "+esc(x.category):"")+"</span></td><td align='right' style='padding:9px 8px;border-bottom:1px solid #d8e0e8;font-size:13px;font-weight:700;color:"+(activityAmount(x)>0?"#a1122f":"#24633f")+"'>"+(activityAmount(x)>0?"+":"−")+fmtMoney(Math.abs(activityAmount(x)))+"</td></tr>").join("");
+  return "<h2 style='color:#004b8d;font-size:19px;margin:24px 0 10px'>"+(mode==="ledger"?"Selected account details":"Recent account activity")+"</h2><table role='presentation' width='100%' cellspacing='0' cellpadding='0' border='0'><tr><th align='left' style='padding:8px;background:#eef3f8;font-size:12px'>DATE</th><th align='left' style='padding:8px;background:#eef3f8;font-size:12px'>DETAIL</th><th align='right' style='padding:8px;background:#eef3f8;font-size:12px'>AMOUNT</th></tr>"+rows+"</table>";
 }
-function treasurerText(family,body,due,support){return "CUB SCOUT PACK 3963\n\nHello "+family+",\n\n"+body+(due==null?"":"\n\nCurrent Pack balance due: "+fmtMoney(due))+"\n\nQuestions? Contact "+support}
+function treasurerActivityText(activity,mode){return activity?.length?"\n\n"+(mode==="ledger"?"SELECTED ACCOUNT DETAILS":"RECENT ACCOUNT ACTIVITY")+"\n"+activity.map(x=>x.occurred_on+" | "+x.account_name+" | "+x.description+" | "+(activityAmount(x)>0?"+":"-")+fmtMoney(Math.abs(activityAmount(x)))).join("\n"):""}
+function paymentHtml(zelle){
+  if(!zelle)return "";
+  return "<div style='margin:22px 0;padding:18px;background:#fff8d9;border-left:5px solid #f7c600;border-radius:7px'><div style='font-size:13px;font-weight:800;color:#004b8d;letter-spacing:.4px'>PAYMENT OPTIONS</div><p style='font-size:15px;line-height:1.55;margin:8px 0 0'>Pay with cash at a Pack meeting or send Zelle to <strong>"+esc(zelle)+"</strong> (Kevin Goldsmith, Pack Treasurer). Include your family name and what the payment covers in the memo.</p></div>";
+}
+function paymentText(zelle){return zelle?"\n\nPAYMENT OPTIONS\nPay with cash at a Pack meeting or send Zelle to "+zelle+" (Kevin Goldsmith, Pack Treasurer). Include your family name and what the payment covers in the memo.":""}
+function emailLogo(){return "<img src='https://www.pack3963.com/assets/images/cubscoutlogo.png' width='170' alt='Cub Scout Pack 3963' style='display:block;width:170px;max-width:100%;height:auto;border:0;margin:0 auto 10px'>"}
+function treasurerHtml(contact,family,subject,body,due,activity,support,zelle,mode){
+  const ps=String(body).split(/\n{2,}/).map(p=>"<p style='font-size:16px;line-height:1.6;margin:0 0 16px'>"+esc(p).replace(/\n/g,"<br>")+"</p>").join("");
+  const bal=due==null?"":"<div style='margin:20px 0;padding:18px;background:#f4f8fc;border-left:5px solid #d71920;border-radius:7px'><div style='font-size:13px;font-weight:800;color:#526474'>CURRENT FAMILY BALANCE DUE</div><div style='font-size:30px;font-weight:800;color:#004b8d;margin-top:4px'>"+fmtMoney(due)+"</div><div style='font-size:13px;color:#607284;margin-top:4px'>"+esc(family)+"</div></div>";
+  return "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'><title>"+esc(subject)+"</title></head><body style='margin:0;background:#eef3f8;color:#243447;font-family:Arial,Helvetica,sans-serif'><div style='display:none;max-height:0;overflow:hidden'>Pack 3963 family account details for "+esc(family)+"</div><table width='100%' cellspacing='0' cellpadding='0' role='presentation' style='background:#eef3f8;padding:24px 12px'><tr><td align='center'><table width='100%' cellspacing='0' cellpadding='0' role='presentation' style='max-width:620px;background:#fff;border-radius:15px;overflow:hidden'><tr><td align='center' style='background:#004b8d;padding:22px 30px;border-bottom:8px solid #f7c600;color:#fff'>"+emailLogo()+"<div style='font-size:15px;font-weight:700'>Pack Treasurer</div></td></tr><tr><td style='padding:30px'><div style='color:#d71920;font-size:12px;font-weight:800;letter-spacing:1px'>FAMILY ACCOUNT</div><h1 style='color:#004b8d;font-size:25px;margin:8px 0 18px'>"+esc(subject)+"</h1><p style='font-size:16px;line-height:1.6'>Hello "+esc(contact)+",</p>"+ps+bal+treasurerActivityHtml(activity,mode)+paymentHtml(zelle)+"<p style='font-size:13px;color:#607284;margin-top:24px'>Questions? Reply or contact <a href='mailto:"+esc(support)+"'>"+esc(support)+"</a>.</p></td></tr><tr><td style='background:#003f75;color:#d9ecff;padding:17px 30px;font-size:12px'>Cub Scout Pack 3963 · Chicago, Illinois</td></tr></table></td></tr></table></body></html>"
+}
+function treasurerText(contact,family,body,due,activity,support,zelle,mode){return "CUB SCOUT PACK 3963\n\nHello "+contact+",\n\n"+body+(due==null?"":"\n\nCurrent family balance due for "+family+": "+fmtMoney(due))+treasurerActivityText(activity,mode)+paymentText(zelle)+"\n\nQuestions? Contact "+support}
 
 function getDeliveries(event, action) {
   const user = event?.user || {};
@@ -270,7 +573,7 @@ function htmlEmail(copy, link, expiry, ttl, support) {
 <div style="display:none;max-height:0;overflow:hidden;">${esc(copy[2])} — valid for ${ttl} minutes.</div>
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef3f8;padding:24px 12px;"><tr><td align="center">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 6px 24px rgba(0,46,93,.12);">
-<tr><td style="background:#004b8d;padding:28px 32px;border-bottom:8px solid #f7c600;"><div style="color:#fff;font-size:26px;font-weight:800;line-height:1.2;">Cub Scout Pack 3963</div><div style="color:#d9ecff;font-size:14px;margin-top:6px;">Treasurer Portal</div></td></tr>
+<tr><td align="center" style="background:#004b8d;padding:22px 32px;border-bottom:8px solid #f7c600;"><img src="https://www.pack3963.com/assets/images/cubscoutlogo.png" width="170" alt="Cub Scout Pack 3963" style="display:block;width:170px;max-width:100%;height:auto;border:0;margin:0 auto 10px;"><div style="color:#d9ecff;font-size:14px;font-weight:700;">Treasurer Portal</div></td></tr>
 <tr><td style="padding:34px 32px 18px;"><div style="color:#d71920;font-size:12px;font-weight:800;letter-spacing:1.2px;">${esc(copy[1])}</div>
 <h1 style="color:#004b8d;font-size:28px;line-height:1.25;margin:10px 0 14px;">${esc(copy[2])}</h1><p style="font-size:16px;line-height:1.6;margin:0 0 24px;">${esc(copy[3])}</p>
 <table role="presentation" cellspacing="0" cellpadding="0"><tr><td style="background:#f7c600;border-radius:8px;"><a href="${u}" style="display:inline-block;color:#003f75;font-weight:800;font-size:16px;text-decoration:none;padding:15px 22px;">${esc(copy[4])}</a></td></tr></table>

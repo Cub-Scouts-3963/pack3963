@@ -2,7 +2,7 @@
   "use strict";
   const SB_URL="https://buvrqioskjjhszqkpypa.supabase.co";
   const SB_KEY="sb_publishable_I15v7OgXeqzJCCg-r7RwRw_ievTWP8V";
-  const EMAIL_API="https://pack3963-auth-email.cubscouts3963.workers.dev/api/treasurer/send-email";
+  const EMAIL_API="https://pack3963-treasury-email.cubscouts3963.workers.dev/api/treasurer/send-email";
   const sb=window.supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:true,detectSessionInUrl:true,autoRefreshToken:true}});
   const state={accounts:[],campaigns:[],orders:[],entries:[],messages:[],recipients:[],contacts:[],access:null};
   const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
@@ -87,9 +87,9 @@
   function renderFamilies(){
     const q=($("#email-family-search")?.value||"").toLowerCase();
     $("#email-family-options").innerHTML=householdAccounts().filter(a=>!q||a.display_name.toLowerCase().includes(q)).map(a=>{
-      const contacts=state.contacts.filter(c=>c.household_account_id===a.id&&c.email);
+      const contacts=state.contacts.filter(c=>c.household_account_id===a.id&&c.active!==false&&c.email);
       const has=contacts.length>0;
-      return `<label class="account-picker-option ${has?"":"is-disabled"}"><input type="checkbox" value="${a.id}" ${has?"":"disabled"}><span><strong>${esc(a.display_name)}</strong><small>${has?esc(contacts.map(c=>c.email).join(", ")):"No email on file"} · ${money(a.balance_cents)}</small></span></label>`;
+      return `<label class="account-picker-option ${has?"":"is-disabled"}"><input type="checkbox" value="${a.id}" ${has?"":"disabled"}><span><strong>${esc(a.display_name)}</strong><small>${has?esc(contacts.map(c=>`${c.full_name}: ${c.email}`).join(" · ")):"No email on file"} · ${money(a.balance_cents)}</small></span></label>`;
     }).join("");
     updateFamilyCount();
   }

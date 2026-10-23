@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "pack3963-auth-email",
   "main": "../../cloudflare/pack3963-auth-email/worker.js",
-  "compatibility_date": "2026-10-21",
+  "compatibility_date": "2026-10-23",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true,
@@ -17,6 +17,7 @@
     "FROM_EMAIL": "Cub Scout Pack 3963 <portal@pack3963.com>",
     "SUPPORT_EMAIL": "cubscouts3963@gmail.com",
     "LINK_TTL_MINUTES": "60",
-    "SUPABASE_URL": "https://buvrqioskjjhszqkpypa.supabase.co"
+    "SUPABASE_URL": "https://buvrqioskjjhszqkpypa.supabase.co",
+    "GOOGLE_DRIVE_ROOT_FOLDER_ID": "1tqaZ3fVkVvks5UDz-EGweyhQcYog11JP"
   }
 }

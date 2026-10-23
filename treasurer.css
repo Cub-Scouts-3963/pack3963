@@ -53,13 +53,16 @@
 .ledger-panel{border-top:5px solid var(--gold)}
 .ledger-panel .eyebrow{margin:0 0 3px;color:#a1122f;font-size:.72rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
 .ledger-meta{margin:8px 0 18px;color:#53687c}
+.ledger-contact{display:grid;grid-template-columns:minmax(180px,1fr) minmax(240px,1.4fr) auto;align-items:center;gap:12px;margin:-4px 0 16px;padding:13px 14px;border:1px solid #d8e0e8;border-radius:7px;background:#f7f9fb}
+.ledger-contact span,.ledger-contact strong{display:block}.ledger-contact span{color:#617488;font-size:.78rem;font-weight:800;text-transform:uppercase}.ledger-contact strong{margin-top:3px;overflow-wrap:anywhere;color:#26384b}
+.ledger-inline-form{margin:0 0 18px;padding:16px;border-left:5px solid var(--gold);background:#f7f9fb}
 .ledger-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:16px}
 .ledger-summary>div{padding:14px;border-radius:7px;background:#f4f7f9;border-top:4px solid var(--gold)}
 .ledger-summary span,.ledger-summary strong{display:block}
 .ledger-summary strong{margin-top:5px;color:var(--blue);font-size:1.3rem}
 .ledger-actions{display:flex;gap:9px;margin-bottom:14px}
 .ledger-table-wrap{border:1px solid #d8e0e8;border-radius:7px}
-@media(max-width:680px){.ledger-summary{grid-template-columns:1fr}.ledger-actions{align-items:stretch;flex-direction:column}.ledger-actions .btn-secondary{width:100%}}
+@media(max-width:680px){.ledger-contact{grid-template-columns:1fr}.ledger-summary{grid-template-columns:1fr}.ledger-actions{align-items:stretch;flex-direction:column}.ledger-actions .btn-secondary{width:100%}}
 
 .account-picker-option.is-disabled{opacity:.55;cursor:not-allowed}
 .portal-panel[data-panel="orders"] .account-picker-options,.portal-panel[data-panel="communications"] .account-picker-options{max-height:330px}
@@ -81,3 +84,58 @@
 .balance-reconciliation strong{margin-top:5px;font-size:1.08rem}
 .field-help{margin:0;padding:11px 13px;border-left:4px solid var(--gold);background:#fff8d9;color:#33475b}
 @media(max-width:680px){.balance-reconciliation{grid-template-columns:1fr}}
+.audit-details{min-width:280px;max-width:520px;overflow-wrap:anywhere;color:#42576b;font-size:.88rem;line-height:1.45}
+
+
+.family-scout-list{display:flex;flex-wrap:wrap;gap:6px}
+.family-scout{display:inline-flex;align-items:center;gap:6px;padding:5px 8px;border-radius:999px;background:#eef5fb;color:#26384b}
+.family-scout small{color:#617488}
+.family-row-actions{display:flex;flex-wrap:wrap;gap:6px}
+.family-ledger-members{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px;margin:0 0 16px}
+.family-member-balance{display:grid;gap:4px;padding:13px;text-align:left;border:1px solid #d8e0e8;border-radius:8px;background:#fff;color:#26384b;cursor:pointer}
+.family-member-balance:hover,.family-member-balance.is-selected{border-color:var(--blue);background:#eef5fb}
+.family-member-balance span{font-weight:800}
+.family-member-balance strong{font-size:1.2rem}
+.family-member-balance small{color:#617488}
+.ledger-account-filter{display:grid;gap:4px;min-width:190px;color:#33475b;font-size:.78rem;font-weight:800}
+.ledger-account-filter select{min-height:36px;padding:6px 9px;border:1px solid #aebac7;border-radius:6px;background:#fff;color:#26384b;font:inherit}
+@media(max-width:680px){.family-table-wrap table{min-width:850px}.family-ledger-members{grid-template-columns:1fr}.ledger-account-filter{width:100%}}
+
+
+/* Family contacts and family-specific balance email */
+.ledger-contacts{margin:-4px 0 16px;padding:14px;border:1px solid #d8e0e8;border-radius:8px;background:#f7f9fb}
+.ledger-contacts .card-heading-row{margin-bottom:10px}
+.section-label{display:block;color:#617488;font-size:.78rem;font-weight:800;text-transform:uppercase}
+.field-help-plain{margin:3px 0 0;color:#53687c;font-size:.9rem}
+.ledger-contact-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(245px,1fr));gap:10px}
+.ledger-contact-card{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px;border:1px solid #d8e0e8;border-radius:7px;background:#fff}
+.ledger-contact-copy{min-width:0}
+.ledger-contact-copy>div{display:flex;align-items:center;flex-wrap:wrap;gap:7px}
+.ledger-contact-copy strong,.ledger-contact-copy a,.ledger-contact-copy small{display:block;overflow-wrap:anywhere}
+.ledger-contact-copy a{margin-top:4px;color:var(--blue)}
+.ledger-contact-copy small{margin-top:4px;color:#617488}
+.contact-badge{padding:3px 7px;border-radius:999px;background:#e5f0fb;color:var(--blue);font-size:.7rem;font-weight:800;text-transform:uppercase}
+.ledger-contact-actions{display:flex;align-items:center;flex-wrap:wrap;gap:7px}
+.danger-link{color:#a1122f}
+.empty-contact{margin:0;color:#617488;font-style:italic}
+.ledger-email-composer{margin:0 0 16px;padding:18px;border:1px solid #b8c8d8;border-top:5px solid var(--gold);border-radius:8px;background:#fff}
+.ledger-email-composer .field-help{margin:0 0 16px}
+.ledger-email-fieldset{margin:0 0 16px;padding:12px;border:1px solid #d8e0e8;border-radius:7px}
+.ledger-email-fieldset legend{padding:0 6px;color:#33475b;font-weight:800}
+.ledger-email-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px}
+.ledger-email-items{max-height:300px;overflow:auto}
+.ledger-email-option{display:flex!important;align-items:flex-start;gap:9px!important;padding:10px;border-radius:6px;background:#f7f9fb;color:#26384b!important;cursor:pointer}
+.ledger-email-option:hover{background:#eef5fb}
+.ledger-email-option input{width:auto!important;min-height:0!important;margin:3px 0 0;accent-color:var(--blue)}
+.ledger-email-option span,.ledger-email-option strong,.ledger-email-option small{display:block}
+.ledger-email-option small{margin-top:3px;color:#617488;font-weight:400}
+.ledger-email-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:0 0 10px}
+.payment-note{display:grid;gap:4px;margin:0 0 14px;padding:12px 14px;border-left:4px solid var(--gold);background:#fff8d9;color:#33475b}
+.payment-note span{font-size:.9rem}
+@media(max-width:680px){
+  .ledger-contact-list,.ledger-email-options{grid-template-columns:1fr}
+  .ledger-contact-card{flex-direction:column}
+  .ledger-contact-actions,.ledger-contact-actions .btn-secondary{width:100%}
+  .ledger-email-toolbar{align-items:stretch;flex-direction:column}
+  .ledger-email-toolbar .btn-secondary,.ledger-email-toolbar .text-button{width:100%}
+}

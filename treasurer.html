@@ -45,7 +45,7 @@ styles:
 
     <nav class="portal-tabs" aria-label="Treasurer sections">
       <button class="portal-tab is-active" type="button" data-tab="dashboard">Dashboard</button>
-      <button class="portal-tab" type="button" data-tab="accounts">Scouts &amp; accounts</button>
+      <button class="portal-tab" type="button" data-tab="accounts">Families</button>
       <button class="portal-tab" type="button" data-tab="transactions">Charges &amp; payments</button>
       <button class="portal-tab" type="button" data-tab="expenses">Expenses &amp; receipts</button>
       <button class="portal-tab" type="button" data-tab="orders">Orders</button>
@@ -54,6 +54,7 @@ styles:
       <button class="portal-tab" type="button" data-tab="import">Import</button>
       <button class="portal-tab write-control" type="button" data-tab="categories">Categories</button>
       <button class="portal-tab admin-only" type="button" data-tab="access">Access</button>
+      <button class="portal-tab admin-only" type="button" data-tab="audit">Audit log</button>
     </nav>
     <p id="app-status" class="form-status" role="status"></p>
 
@@ -93,13 +94,12 @@ styles:
 
     <section class="portal-panel" data-panel="accounts">
       <div class="filter-bar">
-        <input id="account-search" type="search" placeholder="Search Scout, family, den, or ID">
-        <select id="account-type-filter" aria-label="Filter accounts by type"><option value="all">All types</option><option value="scout">Scouts</option><option value="household">Families</option><option value="parent">Parents</option></select>
+        <input id="account-search" type="search" placeholder="Search family, parent, Scout, den, or ID">
         <select id="balance-filter" aria-label="Filter accounts by status"><option value="current">All current statuses</option><option value="due">Balance due</option><option value="credit">Has a credit</option><option value="paid">Paid / even</option><option value="inactive">Removed / inactive</option><option value="all">Current and removed</option></select>
-        <button class="btn-blue write-control" type="button" id="show-account-form">Add Scout or account</button>
+        <button class="btn-blue write-control" type="button" id="show-account-form">Add family or Scout</button>
       </div>
       <form id="account-form" class="card portal-form collapsible-form" hidden>
-        <div class="card-heading-row"><h3>Add Scout or family account</h3><button type="button" class="text-button" data-close-form="account-form">Close</button></div>
+        <div class="card-heading-row"><h3>Add a family or Scout</h3><button type="button" class="text-button" data-close-form="account-form">Close</button></div>
         <div class="form-grid">
           <label>Account type<select name="account_type" required><option value="scout">Scout</option><option value="household">Household</option><option value="parent">Parent</option></select></label>
           <label>Display name<input name="display_name" required placeholder="Jordan Smith"></label>
@@ -112,13 +112,34 @@ styles:
         <label>Notes<textarea name="notes" rows="2"></textarea></label>
         <button class="btn-blue" type="submit">Add account</button>
       </form>
-      <div class="table-wrap card"><table><thead><tr><th>Scout / account</th><th>Family contacts</th><th>Den</th><th>Type</th><th class="money">Balance</th><th>Status</th><th>Ledger</th><th class="write-control">Action</th></tr></thead><tbody id="accounts-table"></tbody></table></div>
+      <div class="table-wrap card family-table-wrap"><table><thead><tr><th>Family</th><th>Scouts</th><th>Family contacts</th><th class="money">Total balance</th><th>Status</th><th>Actions</th></tr></thead><tbody id="accounts-table"></tbody></table></div>
       <section id="account-ledger" class="card ledger-panel" hidden aria-labelledby="ledger-title">
         <div class="card-heading-row">
-          <div><p class="eyebrow">Account ledger</p><h3 id="ledger-title">Account ledger</h3></div>
+          <div><p class="eyebrow">Family ledger</p><h3 id="ledger-title">Family ledger</h3></div>
           <button type="button" class="text-button" id="close-account-ledger">Close</button>
         </div>
         <p id="ledger-meta" class="ledger-meta"></p>
+        <section class="ledger-contacts" aria-labelledby="ledger-contacts-title">
+          <div class="card-heading-row">
+            <div><span class="section-label">Family contacts</span><p class="field-help-plain">Add every parent or guardian who may receive account emails.</p></div>
+            <button class="btn-secondary write-control" type="button" id="add-ledger-contact">Add parent or guardian</button>
+          </div>
+          <div id="ledger-contact-list" class="ledger-contact-list"></div>
+        </section>
+        <form id="ledger-contact-form" class="portal-form ledger-inline-form" hidden>
+          <input name="household_account_id" type="hidden">
+          <input name="contact_id" type="hidden">
+          <div class="card-heading-row"><h4 id="ledger-contact-form-title">Add parent or guardian</h4><button class="text-button" type="button" id="cancel-ledger-contact">Cancel</button></div>
+          <div class="form-grid">
+            <label>Parent or guardian name<input name="full_name" maxlength="160" required></label>
+            <label>Email address<input name="email" type="email" maxlength="320" required></label>
+            <label>Relationship<input name="relationship" list="family-relationship-options" maxlength="80" placeholder="Parent, guardian, grandparent…"><datalist id="family-relationship-options"><option value="Parent"><option value="Guardian"><option value="Mother"><option value="Father"><option value="Grandparent"></datalist></label>
+          </div>
+          <label class="check-row"><input name="is_primary" type="checkbox"> Make this the primary family contact</label>
+          <div class="action-group"><button class="btn-blue" type="submit">Save contact</button></div>
+          <p id="ledger-contact-status" class="form-status" role="status"></p>
+        </form>
+        <div class="family-ledger-members" id="ledger-members" aria-label="Family and Scout balances"></div>
         <div class="ledger-summary" aria-label="Ledger totals">
           <div><span>Charges</span><strong id="ledger-charges">$0.00</strong></div>
           <div><span>Payments and credits</span><strong id="ledger-payments">$0.00</strong></div>
@@ -126,9 +147,11 @@ styles:
         </div>
         <div class="ledger-actions">
           <button class="btn-blue write-control" type="button" id="show-ledger-payment">Add payment</button>
+          <label class="ledger-account-filter">Show activity for<select id="ledger-account-filter" aria-label="Filter ledger by family member"><option value="all">Entire family</option></select></label>
           <label class="check-row ledger-toggle"><input id="show-removed-ledger" type="checkbox"> Show removed entries</label>
           <button class="btn-secondary" type="button" id="export-ledger-csv">Export CSV</button>
           <button class="btn-secondary" type="button" id="print-account-ledger">Print / Save PDF</button>
+          <button class="btn-secondary write-control" type="button" id="email-account-balance">Email balance details</button>
         </div>
         <form id="ledger-payment-form" class="portal-form" hidden>
           <div class="card-heading-row"><h3 id="ledger-settlement-heading">Record a payment or Pack assistance</h3><button class="text-button" type="button" id="close-ledger-payment">Cancel</button></div>
@@ -141,11 +164,26 @@ styles:
             <label id="ledger-payment-method-field">Payment method<select name="payment_method" required><option value="">Choose method</option><option value="cash">Cash</option><option value="zelle">Zelle</option><option value="venmo">Venmo</option><option value="check">Check</option><option value="card">Card</option><option value="bank_transfer">Bank transfer</option><option value="other">Other</option></select></label>
             <label>Reference<input name="reference" placeholder="Check number or transfer note"></label>
           </div>
-          <label class="check-row" id="ledger-balance-impact-field"><input name="affects_pack_balance" type="checkbox" checked> Add these received funds to the projected Pack balance</label>
+          <label class="check-row" id="ledger-balance-impact-field"><input name="affects_pack_balance" type="checkbox" checked> Add this payment to the Pack’s projected bank balance</label>
+          <p class="field-help" id="ledger-balance-impact-help">Select this when the Pack received actual money, such as cash, Zelle, or a check. Leave it unchecked for corrections, credits, or financial assistance.</p>
           <p class="field-help" id="ledger-assistance-help" hidden>Choose the fee being covered and add a note explaining the assistance. This clears the Scout or family balance without recording cash received.</p>
           <label>Notes<textarea name="notes" rows="2"></textarea></label>
           <button class="btn-blue" type="submit" id="save-ledger-settlement">Save payment</button>
           <p id="ledger-payment-status" class="form-status" role="status"></p>
+        </form>
+        <form id="ledger-email-form" class="portal-form ledger-email-composer" hidden>
+          <div class="card-heading-row"><div><p class="eyebrow">Family email</p><h3>Send balance details</h3></div><button class="text-button" type="button" id="close-ledger-email">Cancel</button></div>
+          <p class="field-help">Choose exactly which parent or guardian receives this message and which ledger items are included. This sends only to this family; use Family emails for a Pack-wide notice.</p>
+          <fieldset class="ledger-email-fieldset"><legend>Recipients</legend><div id="ledger-email-recipients" class="ledger-email-options"></div></fieldset>
+          <fieldset class="ledger-email-fieldset"><legend>Ledger items to include</legend>
+            <div class="ledger-email-toolbar"><button class="btn-secondary" type="button" id="select-outstanding-ledger-items">Select outstanding charges</button><button class="text-button" type="button" id="select-all-ledger-items">Select all</button><button class="text-button" type="button" id="clear-ledger-items">Clear</button></div>
+            <div id="ledger-email-items" class="ledger-email-options ledger-email-items"></div>
+          </fieldset>
+          <label>Subject<input name="subject" maxlength="180" required></label>
+          <label>Message<textarea name="body_text" rows="6" maxlength="8000" required></textarea></label>
+          <div class="payment-note"><strong>Payment information included automatically</strong><span>The email will include the family’s current balance, the selected ledger items, Pack branding, and instructions to pay by cash or Zelle to Kevin.</span></div>
+          <button class="btn-blue" type="submit" id="send-ledger-email">Send to selected contact(s)</button>
+          <p id="ledger-email-status" class="form-status" role="status"></p>
         </form>
         <div class="table-wrap ledger-table-wrap">
           <table>
@@ -172,7 +210,8 @@ styles:
           <label>Payment method<select name="payment_method"><option value="">Not applicable</option><option value="cash">Cash</option><option value="zelle">Zelle</option><option value="venmo">Venmo</option><option value="check">Check</option><option value="card">Card</option><option value="bank_transfer">Bank transfer</option><option value="other">Other</option></select></label>
           <label>Reference<input name="reference" placeholder="Check number or transfer note"></label>
         </div>
-        <label class="check-row" id="entry-balance-impact-field" hidden><input name="affects_pack_balance" type="checkbox"> Add received funds to the projected Pack balance</label>
+        <label class="check-row" id="entry-balance-impact-field" hidden><input name="affects_pack_balance" type="checkbox"> Add this payment to the Pack’s projected bank balance</label>
+        <p class="field-help" id="entry-balance-impact-help" hidden>Select this when the Pack received actual money, such as cash, Zelle, or a check. Leave it unchecked for corrections or credits.</p>
         <label>Description<input name="description" required placeholder="2026–27 Pack dues"></label>
         <div class="account-picker-field">
           <span class="field-label">Apply to one or more accounts</span>
@@ -196,10 +235,13 @@ styles:
       <div class="filter-bar">
         <input id="expense-search" type="search" placeholder="Search vendor, category, purchaser, or notes">
         <select id="expense-filter"><option value="active">Active expenses</option><option value="reimbursement">Reimbursements</option><option value="unpaid">Awaiting reimbursement</option><option value="missing">Missing receipt</option><option value="voided">Removed / voided</option><option value="all">Everything</option></select>
+        <button class="btn-secondary write-control" type="button" id="sync-drive-receipts">Organize receipts in Google Drive</button>
         <button class="btn-blue write-control" type="button" id="show-expense-form">Add expense</button>
       </div>
+      <p id="drive-sync-status" class="form-status" role="status"></p>
       <form id="expense-form" class="card portal-form collapsible-form" hidden>
-        <div class="card-heading-row"><h3>Record Pack expense</h3><button type="button" class="text-button" data-close-form="expense-form">Close</button></div>
+        <input name="expense_id" type="hidden">
+        <div class="card-heading-row"><h3 id="expense-form-heading">Record Pack expense</h3><button type="button" class="text-button" data-close-form="expense-form">Close</button></div>
         <div class="form-grid">
           <label>Paid by<select name="expense_type" required><option value="pack_card">Pack card / Pack bank account</option><option value="reimbursement">A person who needs reimbursement</option></select></label>
           <label>Amount<input name="amount" type="number" min="0.01" step="0.01" required></label>
@@ -212,9 +254,10 @@ styles:
           <label>Receipt (PDF or image, 10 MB max)<input name="receipt" type="file" accept="image/jpeg,image/png,image/webp,application/pdf"></label>
         </div>
         <label class="check-row"><input name="affects_pack_balance" type="checkbox" checked> Deduct this expense from the projected Pack balance</label>
+        <p class="field-help" id="expense-balance-help">Pack-card and Pack-bank purchases are always deducted. Reimbursements are deducted when they are marked paid.</p>
         <label>Description<input name="description"></label>
         <label>Notes<textarea name="notes" rows="2"></textarea></label>
-        <button class="btn-blue" type="submit">Save expense</button>
+        <button class="btn-blue" type="submit" id="save-expense">Save expense</button>
       </form>
       <div class="table-wrap card"><table><thead><tr><th>Date</th><th>Vendor</th><th>Type / status</th><th>Paid by</th><th>Pack balance</th><th>Receipt</th><th class="money">Amount</th><th class="write-control">Action</th></tr></thead><tbody id="expenses-table"></tbody></table></div>
     </section>
@@ -261,7 +304,7 @@ styles:
     <section class="portal-panel" data-panel="communications">
       <article class="card">
         <p class="page-kicker">Invoices and family updates</p><h3>Write to selected families</h3>
-        <p>Invoice emails automatically include the family’s current Pack balance. Recipients come only from saved family contacts, and every send is recorded below.</p>
+        <p>Use this area for Pack-wide charges or notices. Each selected family receives one copy at every active parent or guardian email on file, and every delivery is recorded below. For one family, open its ledger and choose Email balance details.</p>
         <form id="email-form" class="portal-form">
           <div class="form-grid"><label>Email type<select name="message_type"><option value="invoice">Invoice / balance notice</option><option value="custom">Custom family email</option></select></label><label>Subject<input name="subject" required placeholder="Pack 3963 account update"></label></div>
           <label>Message<textarea name="body_text" rows="6" required placeholder="Here is an update about your Pack account..."></textarea></label>
@@ -358,6 +401,19 @@ styles:
         </form>
         <p class="form-status" id="access-status" role="status"></p>
         <div class="table-wrap"><table><thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Status</th><th>Invitation</th></tr></thead><tbody id="access-table"></tbody></table></div>
+      </article>
+    </section>
+
+    <section class="portal-panel admin-only" data-panel="audit">
+      <div class="filter-bar">
+        <input id="audit-search" type="search" placeholder="Search user, action, record, or details">
+        <select id="audit-table-filter" aria-label="Filter audit log by area"><option value="all">All areas</option></select>
+        <button class="btn-secondary" id="refresh-audit" type="button">Refresh audit log</button>
+      </div>
+      <article class="card">
+        <div class="card-heading-row"><div><p class="page-kicker">Administrators only</p><h3>System activity</h3></div><small id="audit-count"></small></div>
+        <p>Tracks who created, edited, removed, or restored financial records and administrative settings.</p>
+        <div class="table-wrap"><table><thead><tr><th>When</th><th>User</th><th>Area</th><th>Action</th><th>Record</th><th>Details</th></tr></thead><tbody id="audit-table"></tbody></table></div>
       </article>
     </section>
   </div>
