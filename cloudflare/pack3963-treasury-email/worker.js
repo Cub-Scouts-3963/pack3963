@@ -52,7 +52,7 @@ async function handleTreasurerEmail(request,env) {
     if(!ids.length||!subject||!body) return corsResponse(request,{error:"missing_required_fields"},400);
     if(mode==="ledger"&&(ids.length!==1||!contactIds.length||!entryIds.length||type!=="invoice")) return corsResponse(request,{error:"select_recipients_and_ledger_items"},400);
     const made=await sbFetch(env,token,"email_messages",{method:"POST",headers:{prefer:"return=representation"},body:JSON.stringify({message_type:type,subject,body_text:body,status:"sending",sent_by_email:user.email,recipient_count:0})});
-    const message=made[0]; let sent=0,failed=0,skipped=0;
+    const message=made[0]; let sent=0,failed=0,skipped=0; const invoiceIds=[];
     for(const hid of ids) {
       const hs=await sbFetch(env,token,"financial_accounts?select=id,display_name&id=eq."+hid+"&account_type=eq.household&active=eq.true");
       if(!hs.length){skipped++;continue}
@@ -71,20 +71,44 @@ async function handleTreasurerEmail(request,env) {
         activity=(await sbFetch(env,token,"ledger_entries?select=id,account_id,entry_type,amount_cents,occurred_on,description,category&"+filter+"&order=occurred_on.desc")).map(x=>({...x,account_name:accountNames[x.account_id]||"Pack account"}));
       }
       if(mode==="ledger"&&activity.length!==entryIds.length){skipped+=recipients.length;continue}
+      let householdSent=0;
       for(const c of recipients) {
         let provider=null,rs="failed",err=null;
         try {
           const rr=await fetch("https://api.resend.com/emails",{method:"POST",headers:{authorization:"Bearer "+env.RESEND_API_KEY,"content-type":"application/json","idempotency-key":message.id+":"+hid+":"+c.id},body:JSON.stringify({from:env.FROM_EMAIL,to:[c.email],subject,html:treasurerHtml(c.full_name,hs[0].display_name,subject,body,type==="invoice"?due:null,activity,env.SUPPORT_EMAIL,type==="invoice"?env.ZELLE_PAYMENT_INFO:null,mode),text:treasurerText(c.full_name,hs[0].display_name,body,type==="invoice"?due:null,activity,env.SUPPORT_EMAIL,type==="invoice"?env.ZELLE_PAYMENT_INFO:null,mode),reply_to:env.SUPPORT_EMAIL})});
           const rd=await rr.json(); if(!rr.ok) throw new Error(rd?.message||"Email provider rejected the message");
-          provider=rd.id||null;rs="sent";sent++;
+          provider=rd.id||null;rs="sent";sent++;householdSent++;
         } catch(e){err=String(e.message||e).slice(0,500);failed++}
         await sbFetch(env,token,"email_recipients",{method:"POST",headers:{prefer:"return=minimal"},body:JSON.stringify({message_id:message.id,household_account_id:hid,recipient_name:c.full_name,recipient_email:c.email,provider_message_id:provider,status:rs,error_message:err,sent_at:rs==="sent"?new Date().toISOString():null})});
+      }
+      if(type==="invoice"&&householdSent>0) {
+        const invoiceDate=chicagoDate();
+        const invoiceNumber="P3963-"+invoiceDate.replace(/-/g,"")+"-"+message.id.slice(0,8).toUpperCase()+"-"+hid.slice(0,4).toUpperCase();
+        const created=await sbFetch(env,token,"invoice_documents",{method:"POST",headers:{prefer:"return=representation"},body:JSON.stringify({
+          message_id:message.id,
+          household_account_id:hid,
+          invoice_number:invoiceNumber,
+          invoice_date:invoiceDate,
+          family_name:hs[0].display_name,
+          subject,
+          body_text:body,
+          balance_cents:due,
+          line_items:activity,
+          support_email:env.SUPPORT_EMAIL,
+          drive_sync_status:"pending"
+        })});
+        if(created[0]?.id) invoiceIds.push(created[0].id);
       }
     }
     const final=sent&&!failed&&!skipped?"sent":sent?"partial":"failed";
     await sbFetch(env,token,"email_messages?id=eq."+message.id,{method:"PATCH",headers:{prefer:"return=minimal"},body:JSON.stringify({status:final,recipient_count:sent,sent_at:new Date().toISOString()})});
-    return corsResponse(request,{ok:sent>0,message_id:message.id,sent,failed,skipped,status:final},sent>0?200:400);
+    return corsResponse(request,{ok:sent>0,message_id:message.id,invoice_ids:invoiceIds,sent,failed,skipped,status:final},sent>0?200:400);
   } catch(e){console.error(JSON.stringify({event:"treasurer_email_failed",reason:String(e.message||e)}));return corsResponse(request,{error:String(e.message||"Unable to send email")},500)}
+}
+function chicagoDate(){
+  const parts=new Intl.DateTimeFormat("en-US",{timeZone:"America/Chicago",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+  const values=Object.fromEntries(parts.map(part=>[part.type,part.value]));
+  return values.year+"-"+values.month+"-"+values.day;
 }
 function fmtMoney(v){return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format((Number(v)||0)/100)}
 function activityAmount(entry){return (entry.entry_type==="charge"?1:-1)*Number(entry.amount_cents||0)}

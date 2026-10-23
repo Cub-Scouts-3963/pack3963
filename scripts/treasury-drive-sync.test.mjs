@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { driveFolderName, driveReceiptFilename } from "../cloudflare/pack3963-auth-email/worker.js";
+import { driveFolderName, driveReceiptFilename, driveInvoiceFilename, invoiceDocumentHtml } from "../cloudflare/pack3963-auth-email/worker.js";
 
 test("Drive month folders follow the expense date rather than upload time", () => {
   assert.equal(driveFolderName("2026-09-17"), "September 2026");
@@ -29,4 +29,26 @@ test("Drive receipt names use descriptions and MIME types as fallbacks", () => {
     driveReceiptFilename(expense, receipt),
     "2026-10-23 - Pathway to Adventure - Pushmobile registration - $98.88.png"
   );
+});
+
+
+test("Drive invoice files live under readable family names", () => {
+  const invoice = {
+    id: "12345678-1234-4123-8123-123456789abc",
+    invoice_date: "2026-10-23",
+    invoice_number: "P3963-20261023-ABC12345-DEF0",
+    family_name: "Weninger family",
+    balance_cents: 5000,
+    body_text: "Please review this balance.",
+    support_email: "cubscouts3963@gmail.com",
+    line_items: [{ occurred_on: "2026-10-23", account_name: "Benjamin Weninger", description: "Pack fees", category: "Dues", entry_type: "charge", amount_cents: 5000 }]
+  };
+  assert.equal(
+    driveInvoiceFilename(invoice),
+    "2026-10-23 - Weninger family - Invoice P3963-20261023-ABC12345-DEF0"
+  );
+  const html = invoiceDocumentHtml(invoice);
+  assert.match(html, /Weninger family/);
+  assert.match(html, /Pack fees/);
+  assert.match(html, /\$50\.00/);
 });

@@ -5,6 +5,7 @@
   const SUPABASE_KEY = "sb_publishable_I15v7OgXeqzJCCg-r7RwRw_ievTWP8V";
   const INVITATION_API = "https://pack3963-auth-email.cubscouts3963.workers.dev/api/treasurer/invite-user";
   const RECEIPT_DRIVE_SYNC_API = "https://pack3963-auth-email.cubscouts3963.workers.dev/api/treasurer/receipt-drive-sync";
+  const INVOICE_DRIVE_SYNC_API = "https://pack3963-auth-email.cubscouts3963.workers.dev/api/treasurer/invoice-drive-sync";
   const TREASURER_EMAIL_API = "https://pack3963-treasury-email.cubscouts3963.workers.dev/api/treasurer/send-email";
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: { persistSession: true, detectSessionInUrl: true, autoRefreshToken: true }
@@ -449,6 +450,10 @@
     });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Unable to send the family email.");
+    if (Array.isArray(data.invoice_ids) && data.invoice_ids.length) {
+      try { data.drive_archive = await requestInvoiceDriveSync({ invoice_ids: data.invoice_ids }); }
+      catch (error) { data.drive_archive = { synced: 0, failed: data.invoice_ids.length, error: error.message || "Invoice archive failed." }; }
+    }
     return data;
   }
 
@@ -808,16 +813,32 @@
     catch (error) { return { synced: 0, failed: 1, error: error.message || "Google Drive synchronization failed." }; }
   }
 
+  async function requestInvoiceDriveSync(payload) {
+    const { data } = await client.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) throw new Error("Your session expired. Sign in again before archiving invoices.");
+    const response = await fetch(INVOICE_DRIVE_SYNC_API, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok && !result.results) throw new Error(result.error || "Invoice archiving failed.");
+    return result;
+  }
+
   async function syncPendingDriveReceipts() {
     const button = $("#sync-drive-receipts");
     button.disabled = true;
     status("Reviewing existing receipts and organizing Google Drive…", "", "#drive-sync-status");
     try {
-      const result = await requestReceiptDriveSync({ sync_pending: true });
-      const message = result.failed
-        ? `${result.synced} receipt${result.synced === 1 ? "" : "s"} synchronized; ${result.failed} still need attention.`
-        : `${result.synced} receipt${result.synced === 1 ? "" : "s"} organized in Google Drive.`;
-      status(message, result.failed ? "error" : "success", "#drive-sync-status");
+      const [receiptResult, invoiceResult] = await Promise.all([
+        requestReceiptDriveSync({ review_all: true }),
+        requestInvoiceDriveSync({ sync_pending: true })
+      ]);
+      const failed = Number(receiptResult.failed || 0) + Number(invoiceResult.failed || 0);
+      const message = `${receiptResult.synced} receipt${receiptResult.synced === 1 ? "" : "s"} reviewed and organized; ${invoiceResult.synced} invoice${invoiceResult.synced === 1 ? "" : "s"} archived.${failed ? " " + failed + " item" + (failed === 1 ? "" : "s") + " still need attention." : ""}`;
+      status(message, failed ? "error" : "success", "#drive-sync-status");
       await loadAll();
     } catch (error) {
       status(error.message || "Unable to synchronize receipts.", "error", "#drive-sync-status");
@@ -1200,7 +1221,7 @@
       status("Sending family balance email…", "", "#ledger-email-status");
       try {
         const result = await sendLedgerBalanceEmail(form);
-        status(`Sent to ${result.sent} contact${result.sent === 1 ? "" : "s"}.${result.failed ? " " + result.failed + " failed." : ""}`, result.failed ? "error" : "success", "#ledger-email-status");
+        status(`Sent to ${result.sent} contact${result.sent === 1 ? "" : "s"}.${result.drive_archive?.synced ? " Invoice saved to Google Drive." : ""}${result.drive_archive?.failed ? " Invoice sent, but the Drive archive needs attention." : ""}${result.failed ? " " + result.failed + " failed." : ""}`, result.failed || result.drive_archive?.failed ? "error" : "success", "#ledger-email-status");
       } catch (error) { status(error.message || "Unable to send the family email.", "error", "#ledger-email-status"); }
       finally { button.disabled = false; updateLedgerEmailCounts(); }
     });
