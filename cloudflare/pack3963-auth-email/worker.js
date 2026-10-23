@@ -444,30 +444,43 @@ async function handleTreasurerEmail(request,env) {
     const access=await sbFetch(env,token,"authorized_users?select=email,role,active&email=eq."+encodeURIComponent(String(user.email||"").toLowerCase())+"&active=eq.true");
     if(!access.length||!["admin","treasurer"].includes(access[0].role)) return corsResponse(request,{error:"not_authorized"},403);
     const p=await request.json();
-    const ids=[...new Set(Array.isArray(p.household_ids)?p.household_ids:[])].filter(v=>/^[0-9a-f-]{36}$/i.test(v)).slice(0,100);
+    const uuid=v=>/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+    const ids=[...new Set(Array.isArray(p.household_ids)?p.household_ids:[])].filter(uuid).slice(0,100);
+    const contactIds=[...new Set(Array.isArray(p.contact_ids)?p.contact_ids:[])].filter(uuid).slice(0,20);
+    const entryIds=[...new Set(Array.isArray(p.ledger_entry_ids)?p.ledger_entry_ids:[])].filter(uuid).slice(0,100);
+    const mode=p.delivery_mode==="ledger"?"ledger":"bulk";
     const type=p.message_type==="custom"?"custom":"invoice", subject=String(p.subject||"").trim().slice(0,180), body=String(p.body_text||"").trim().slice(0,8000);
     if(!ids.length||!subject||!body) return corsResponse(request,{error:"missing_required_fields"},400);
+    if(mode==="ledger"&&(ids.length!==1||!contactIds.length||!entryIds.length||type!=="invoice")) return corsResponse(request,{error:"select_recipients_and_ledger_items"},400);
     const made=await sbFetch(env,token,"email_messages",{method:"POST",headers:{prefer:"return=representation"},body:JSON.stringify({message_type:type,subject,body_text:body,status:"sending",sent_by_email:user.email,recipient_count:0})});
     const message=made[0]; let sent=0,failed=0,skipped=0;
     for(const hid of ids) {
       const hs=await sbFetch(env,token,"financial_accounts?select=id,display_name&id=eq."+hid+"&account_type=eq.household&active=eq.true");
       if(!hs.length){skipped++;continue}
-      const cs=await sbFetch(env,token,"household_contacts?select=full_name,email,is_primary&household_account_id=eq."+hid+"&active=eq.true&email=not.is.null&order=is_primary.desc");
-      const c=cs.find(x=>validEmail(x.email)); if(!c){skipped++;continue}
+      const cs=await sbFetch(env,token,"household_contacts?select=id,full_name,email,relationship,is_primary&household_account_id=eq."+hid+"&active=eq.true&email=not.is.null&order=is_primary.desc");
+      const recipients=cs.filter(c=>validEmail(c.email)&&(mode!=="ledger"||contactIds.includes(c.id)));
+      if(!recipients.length){skipped+=mode==="ledger"?contactIds.length:1;continue}
       const bs=await sbFetch(env,token,"account_balances?select=id,display_name,balance_cents&or=(id.eq."+hid+",parent_account_id.eq."+hid+")");
-      const due=bs.reduce((n,x)=>n+Math.max(0,Number(x.balance_cents||0)),0);
-      const accountIds=bs.map(x=>x.id).filter(x=>/^[0-9a-f-]{36}$/i.test(x));
+      const due=Math.max(0,bs.reduce((n,x)=>n+Number(x.balance_cents||0),0));
+      const accountIds=bs.map(x=>x.id).filter(uuid);
       const accountNames=Object.fromEntries(bs.map(x=>[x.id,x.display_name]));
-      const activity=type==="invoice"&&accountIds.length
-        ?(await sbFetch(env,token,"ledger_entries?select=account_id,entry_type,amount_cents,occurred_on,description,category&voided_at=is.null&account_id=in.("+accountIds.join(",")+")&order=occurred_on.desc&limit=50")).map(x=>({...x,account_name:accountNames[x.account_id]||"Pack account"}))
-        :[];
-      let provider=null,rs="failed",err=null;
-      try {
-        const rr=await fetch("https://api.resend.com/emails",{method:"POST",headers:{authorization:"Bearer "+env.RESEND_API_KEY,"content-type":"application/json","idempotency-key":message.id+":"+hid},body:JSON.stringify({from:env.FROM_EMAIL,to:[c.email],subject,html:treasurerHtml(hs[0].display_name,subject,body,type==="invoice"?due:null,activity,env.SUPPORT_EMAIL),text:treasurerText(hs[0].display_name,body,type==="invoice"?due:null,activity,env.SUPPORT_EMAIL),reply_to:env.SUPPORT_EMAIL})});
-        const rd=await rr.json(); if(!rr.ok) throw new Error(rd?.message||"Email provider rejected the message");
-        provider=rd.id||null;rs="sent";sent++;
-      } catch(e){err=String(e.message||e).slice(0,500);failed++}
-      await sbFetch(env,token,"email_recipients",{method:"POST",headers:{prefer:"return=minimal"},body:JSON.stringify({message_id:message.id,household_account_id:hid,recipient_name:c.full_name,recipient_email:c.email,provider_message_id:provider,status:rs,error_message:err,sent_at:rs==="sent"?new Date().toISOString():null})});
+      let activity=[];
+      if(type==="invoice"&&accountIds.length) {
+        const filter=mode==="ledger"
+          ?"id=in.("+entryIds.join(",")+")&account_id=in.("+accountIds.join(",")+")"
+          :"voided_at=is.null&account_id=in.("+accountIds.join(",")+")&limit=50";
+        activity=(await sbFetch(env,token,"ledger_entries?select=id,account_id,entry_type,amount_cents,occurred_on,description,category&"+filter+"&order=occurred_on.desc")).map(x=>({...x,account_name:accountNames[x.account_id]||"Pack account"}));
+      }
+      if(mode==="ledger"&&activity.length!==entryIds.length){skipped+=recipients.length;continue}
+      for(const c of recipients) {
+        let provider=null,rs="failed",err=null;
+        try {
+          const rr=await fetch("https://api.resend.com/emails",{method:"POST",headers:{authorization:"Bearer "+env.RESEND_API_KEY,"content-type":"application/json","idempotency-key":message.id+":"+hid+":"+c.id},body:JSON.stringify({from:env.FROM_EMAIL,to:[c.email],subject,html:treasurerHtml(c.full_name,hs[0].display_name,subject,body,type==="invoice"?due:null,activity,env.SUPPORT_EMAIL,type==="invoice"?env.ZELLE_PAYMENT_INFO:null,mode),text:treasurerText(c.full_name,hs[0].display_name,body,type==="invoice"?due:null,activity,env.SUPPORT_EMAIL,type==="invoice"?env.ZELLE_PAYMENT_INFO:null,mode),reply_to:env.SUPPORT_EMAIL})});
+          const rd=await rr.json(); if(!rr.ok) throw new Error(rd?.message||"Email provider rejected the message");
+          provider=rd.id||null;rs="sent";sent++;
+        } catch(e){err=String(e.message||e).slice(0,500);failed++}
+        await sbFetch(env,token,"email_recipients",{method:"POST",headers:{prefer:"return=minimal"},body:JSON.stringify({message_id:message.id,household_account_id:hid,recipient_name:c.full_name,recipient_email:c.email,provider_message_id:provider,status:rs,error_message:err,sent_at:rs==="sent"?new Date().toISOString():null})});
+      }
     }
     const final=sent&&!failed&&!skipped?"sent":sent?"partial":"failed";
     await sbFetch(env,token,"email_messages?id=eq."+message.id,{method:"PATCH",headers:{prefer:"return=minimal"},body:JSON.stringify({status:final,recipient_count:sent,sent_at:new Date().toISOString()})});
@@ -476,18 +489,24 @@ async function handleTreasurerEmail(request,env) {
 }
 function fmtMoney(v){return new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format((Number(v)||0)/100)}
 function activityAmount(entry){return (entry.entry_type==="charge"?1:-1)*Number(entry.amount_cents||0)}
-function treasurerActivityHtml(activity){
+function treasurerActivityHtml(activity,mode){
   if(!activity?.length)return "";
-  const rows=activity.map(x=>"<tr><td style='padding:8px;border-bottom:1px solid #d8e0e8;font-size:13px'>"+esc(x.occurred_on)+"</td><td style='padding:8px;border-bottom:1px solid #d8e0e8;font-size:13px'><strong>"+esc(x.description)+"</strong><br><span style='color:#607284'>"+esc(x.account_name)+(x.category?" · "+esc(x.category):"")+"</span></td><td align='right' style='padding:8px;border-bottom:1px solid #d8e0e8;font-size:13px;font-weight:700;color:"+(activityAmount(x)>0?"#a1122f":"#24633f")+"'>"+(activityAmount(x)>0?"+":"−")+fmtMoney(Math.abs(activityAmount(x)))+"</td></tr>").join("");
-  return "<h2 style='color:#004b8d;font-size:19px;margin:24px 0 10px'>Recent account activity</h2><table role='presentation' width='100%' cellspacing='0' cellpadding='0' border='0'><tr><th align='left' style='padding:8px;background:#eef3f8;font-size:12px'>DATE</th><th align='left' style='padding:8px;background:#eef3f8;font-size:12px'>DETAIL</th><th align='right' style='padding:8px;background:#eef3f8;font-size:12px'>AMOUNT</th></tr>"+rows+"</table>";
+  const rows=activity.map(x=>"<tr><td style='padding:9px 8px;border-bottom:1px solid #d8e0e8;font-size:13px'>"+esc(x.occurred_on)+"</td><td style='padding:9px 8px;border-bottom:1px solid #d8e0e8;font-size:13px'><strong>"+esc(x.description)+"</strong><br><span style='color:#607284'>"+esc(x.account_name)+(x.category?" · "+esc(x.category):"")+"</span></td><td align='right' style='padding:9px 8px;border-bottom:1px solid #d8e0e8;font-size:13px;font-weight:700;color:"+(activityAmount(x)>0?"#a1122f":"#24633f")+"'>"+(activityAmount(x)>0?"+":"−")+fmtMoney(Math.abs(activityAmount(x)))+"</td></tr>").join("");
+  return "<h2 style='color:#004b8d;font-size:19px;margin:24px 0 10px'>"+(mode==="ledger"?"Selected account details":"Recent account activity")+"</h2><table role='presentation' width='100%' cellspacing='0' cellpadding='0' border='0'><tr><th align='left' style='padding:8px;background:#eef3f8;font-size:12px'>DATE</th><th align='left' style='padding:8px;background:#eef3f8;font-size:12px'>DETAIL</th><th align='right' style='padding:8px;background:#eef3f8;font-size:12px'>AMOUNT</th></tr>"+rows+"</table>";
 }
-function treasurerActivityText(activity){return activity?.length?"\n\nRECENT ACCOUNT ACTIVITY\n"+activity.map(x=>x.occurred_on+" | "+x.account_name+" | "+x.description+" | "+(activityAmount(x)>0?"+":"-")+fmtMoney(Math.abs(activityAmount(x)))).join("\n"):""}
-function treasurerHtml(family,subject,body,due,activity,support){
+function treasurerActivityText(activity,mode){return activity?.length?"\n\n"+(mode==="ledger"?"SELECTED ACCOUNT DETAILS":"RECENT ACCOUNT ACTIVITY")+"\n"+activity.map(x=>x.occurred_on+" | "+x.account_name+" | "+x.description+" | "+(activityAmount(x)>0?"+":"-")+fmtMoney(Math.abs(activityAmount(x)))).join("\n"):""}
+function paymentHtml(zelle){
+  if(!zelle)return "";
+  return "<div style='margin:22px 0;padding:18px;background:#fff8d9;border-left:5px solid #f7c600;border-radius:7px'><div style='font-size:13px;font-weight:800;color:#004b8d;letter-spacing:.4px'>PAYMENT OPTIONS</div><p style='font-size:15px;line-height:1.55;margin:8px 0 0'>Pay with cash at a Pack meeting or send Zelle to <strong>"+esc(zelle)+"</strong> (Kevin Goldsmith, Pack Treasurer). Include your family name and what the payment covers in the memo.</p></div>";
+}
+function paymentText(zelle){return zelle?"\n\nPAYMENT OPTIONS\nPay with cash at a Pack meeting or send Zelle to "+zelle+" (Kevin Goldsmith, Pack Treasurer). Include your family name and what the payment covers in the memo.":""}
+function emailLogo(){return "<img src='https://www.pack3963.com/assets/images/cubscoutlogo.png' width='170' alt='Cub Scout Pack 3963' style='display:block;width:170px;max-width:100%;height:auto;border:0;margin:0 auto 10px'>"}
+function treasurerHtml(contact,family,subject,body,due,activity,support,zelle,mode){
   const ps=String(body).split(/\n{2,}/).map(p=>"<p style='font-size:16px;line-height:1.6;margin:0 0 16px'>"+esc(p).replace(/\n/g,"<br>")+"</p>").join("");
-  const bal=due==null?"":"<div style='margin:20px 0;padding:18px;background:#f4f8fc;border-left:5px solid #d71920;border-radius:7px'><div style='font-size:13px;font-weight:800;color:#526474'>CURRENT PACK BALANCE DUE</div><div style='font-size:30px;font-weight:800;color:#004b8d;margin-top:4px'>"+fmtMoney(due)+"</div></div>";
-  return "<!doctype html><html><body style='margin:0;background:#eef3f8;color:#243447;font-family:Arial,Helvetica,sans-serif'><table width='100%' role='presentation' style='padding:24px 12px'><tr><td align='center'><table width='100%' role='presentation' style='max-width:620px;background:#fff;border-radius:15px;overflow:hidden'><tr><td style='background:#004b8d;padding:26px 30px;border-bottom:8px solid #f7c600;color:#fff'><div style='font-size:25px;font-weight:800'>Cub Scout Pack 3963</div><div style='color:#d9ecff;margin-top:5px'>Pack Treasurer</div></td></tr><tr><td style='padding:30px'><div style='color:#d71920;font-size:12px;font-weight:800;letter-spacing:1px'>PACK ACCOUNT</div><h1 style='color:#004b8d;font-size:25px;margin:8px 0 18px'>"+esc(subject)+"</h1><p style='font-size:16px;line-height:1.6'>Hello "+esc(family)+",</p>"+ps+bal+treasurerActivityHtml(activity)+"<p style='font-size:13px;color:#607284;margin-top:24px'>Questions? Reply or contact <a href='mailto:"+esc(support)+"'>"+esc(support)+"</a>.</p></td></tr><tr><td style='background:#003f75;color:#d9ecff;padding:17px 30px;font-size:12px'>Cub Scout Pack 3963 · Chicago, Illinois</td></tr></table></td></tr></table></body></html>"
+  const bal=due==null?"":"<div style='margin:20px 0;padding:18px;background:#f4f8fc;border-left:5px solid #d71920;border-radius:7px'><div style='font-size:13px;font-weight:800;color:#526474'>CURRENT FAMILY BALANCE DUE</div><div style='font-size:30px;font-weight:800;color:#004b8d;margin-top:4px'>"+fmtMoney(due)+"</div><div style='font-size:13px;color:#607284;margin-top:4px'>"+esc(family)+"</div></div>";
+  return "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'><title>"+esc(subject)+"</title></head><body style='margin:0;background:#eef3f8;color:#243447;font-family:Arial,Helvetica,sans-serif'><div style='display:none;max-height:0;overflow:hidden'>Pack 3963 family account details for "+esc(family)+"</div><table width='100%' cellspacing='0' cellpadding='0' role='presentation' style='background:#eef3f8;padding:24px 12px'><tr><td align='center'><table width='100%' cellspacing='0' cellpadding='0' role='presentation' style='max-width:620px;background:#fff;border-radius:15px;overflow:hidden'><tr><td align='center' style='background:#004b8d;padding:22px 30px;border-bottom:8px solid #f7c600;color:#fff'>"+emailLogo()+"<div style='font-size:15px;font-weight:700'>Pack Treasurer</div></td></tr><tr><td style='padding:30px'><div style='color:#d71920;font-size:12px;font-weight:800;letter-spacing:1px'>FAMILY ACCOUNT</div><h1 style='color:#004b8d;font-size:25px;margin:8px 0 18px'>"+esc(subject)+"</h1><p style='font-size:16px;line-height:1.6'>Hello "+esc(contact)+",</p>"+ps+bal+treasurerActivityHtml(activity,mode)+paymentHtml(zelle)+"<p style='font-size:13px;color:#607284;margin-top:24px'>Questions? Reply or contact <a href='mailto:"+esc(support)+"'>"+esc(support)+"</a>.</p></td></tr><tr><td style='background:#003f75;color:#d9ecff;padding:17px 30px;font-size:12px'>Cub Scout Pack 3963 · Chicago, Illinois</td></tr></table></td></tr></table></body></html>"
 }
-function treasurerText(family,body,due,activity,support){return "CUB SCOUT PACK 3963\n\nHello "+family+",\n\n"+body+(due==null?"":"\n\nCurrent Pack balance due: "+fmtMoney(due))+treasurerActivityText(activity)+"\n\nQuestions? Contact "+support}
+function treasurerText(contact,family,body,due,activity,support,zelle,mode){return "CUB SCOUT PACK 3963\n\nHello "+contact+",\n\n"+body+(due==null?"":"\n\nCurrent family balance due for "+family+": "+fmtMoney(due))+treasurerActivityText(activity,mode)+paymentText(zelle)+"\n\nQuestions? Contact "+support}
 
 function getDeliveries(event, action) {
   const user = event?.user || {};
@@ -554,7 +573,7 @@ function htmlEmail(copy, link, expiry, ttl, support) {
 <div style="display:none;max-height:0;overflow:hidden;">${esc(copy[2])} — valid for ${ttl} minutes.</div>
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef3f8;padding:24px 12px;"><tr><td align="center">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 6px 24px rgba(0,46,93,.12);">
-<tr><td style="background:#004b8d;padding:28px 32px;border-bottom:8px solid #f7c600;"><div style="color:#fff;font-size:26px;font-weight:800;line-height:1.2;">Cub Scout Pack 3963</div><div style="color:#d9ecff;font-size:14px;margin-top:6px;">Treasurer Portal</div></td></tr>
+<tr><td align="center" style="background:#004b8d;padding:22px 32px;border-bottom:8px solid #f7c600;"><img src="https://www.pack3963.com/assets/images/cubscoutlogo.png" width="170" alt="Cub Scout Pack 3963" style="display:block;width:170px;max-width:100%;height:auto;border:0;margin:0 auto 10px;"><div style="color:#d9ecff;font-size:14px;font-weight:700;">Treasurer Portal</div></td></tr>
 <tr><td style="padding:34px 32px 18px;"><div style="color:#d71920;font-size:12px;font-weight:800;letter-spacing:1.2px;">${esc(copy[1])}</div>
 <h1 style="color:#004b8d;font-size:28px;line-height:1.25;margin:10px 0 14px;">${esc(copy[2])}</h1><p style="font-size:16px;line-height:1.6;margin:0 0 24px;">${esc(copy[3])}</p>
 <table role="presentation" cellspacing="0" cellpadding="0"><tr><td style="background:#f7c600;border-radius:8px;"><a href="${u}" style="display:inline-block;color:#003f75;font-weight:800;font-size:16px;text-decoration:none;padding:15px 22px;">${esc(copy[4])}</a></td></tr></table>
