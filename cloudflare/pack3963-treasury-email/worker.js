@@ -86,9 +86,9 @@ async function invoiceContext(env, token, householdId, entryIds, mode) {
 
 async function createInvoiceRecord(env, token, values) {
   const invoiceDate = chicagoDate();
-  const seed = crypto.randomUUID().replaceAll("-", "").slice(0, 10).toUpperCase();
   const dueDate = invoiceDueDate(values.requestedDueDate, values.activity, invoiceDate);
-  const invoiceNumber = "P3963-" + invoiceDate.replaceAll("-", "") + "-" + seed;
+  const invoiceNumber = await sbFetch(env, token, "rpc/next_pack_invoice_number", { method: "POST", body: "{}" });
+  if (typeof invoiceNumber !== "string" || !/^P3963-\\d{4}-\\d{3,}$/.test(invoiceNumber)) throw new Error("Unable to allocate an invoice number");
   const created = await sbFetch(env, token, "invoice_documents", {
     method: "POST", headers: { prefer: "return=representation" },
     body: JSON.stringify({
