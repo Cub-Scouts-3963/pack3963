@@ -29,6 +29,6 @@ test("official invoice page contains required Pack letterhead and print footer",
 
 test("invoice numbers are allocated by the database instead of random UUIDs", () => {
   const worker = readFileSync(new URL("../cloudflare/pack3963-treasury-email/worker.js", import.meta.url), "utf8");
-  assert.match(worker, /rpc\\/next_pack_invoice_number/);
-  assert.doesNotMatch(worker, /randomUUID\\(\\)\\.replaceAll/);
+  assert.match(worker, /rpc\/next_pack_invoice_number/);
+  assert.doesNotMatch(worker, /randomUUID\(\)\.replaceAll/);
 });
