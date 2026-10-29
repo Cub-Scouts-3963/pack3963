@@ -3,8 +3,17 @@
 
   const SUPABASE_URL = "https://buvrqioskjjhszqkpypa.supabase.co";
   const SUPABASE_KEY = "sb_publishable_I15v7OgXeqzJCCg-r7RwRw_ievTWP8V";
+  const AUTH_STORAGE_KEY = "pack3963-family-account-session";
+  const LEGACY_AUTH_STORAGE_KEY = "sb-buvrqioskjjhszqkpypa-auth-token";
+  try { window.localStorage.removeItem(LEGACY_AUTH_STORAGE_KEY); } catch (_) { /* Storage may be unavailable. */ }
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-    auth: { persistSession: true, detectSessionInUrl: true, autoRefreshToken: true }
+    auth: {
+      persistSession: true,
+      storage: window.sessionStorage,
+      storageKey: AUTH_STORAGE_KEY,
+      detectSessionInUrl: true,
+      autoRefreshToken: true
+    }
   });
   const state = { portal: null, householdIndex: 0, session: null };
   const $ = selector => document.querySelector(selector);
@@ -135,7 +144,8 @@
   }
 
   async function signOut() {
-    await client.auth.signOut();
+    await client.auth.signOut({ scope: "local" });
+    window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
     state.portal = null;
     state.session = null;
     history.replaceState({}, document.title, location.pathname);
@@ -181,6 +191,10 @@
   client.auth.onAuthStateChange((event, session) => {
     state.session = session;
     if (event === "SIGNED_OUT") show("auth");
+  });
+
+  window.addEventListener("pagehide", () => {
+    window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
   });
 
   client.auth.getSession().then(({ data, error }) => {

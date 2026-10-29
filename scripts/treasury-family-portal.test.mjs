@@ -23,6 +23,14 @@ test("family sign-in uses a one-time email link and does not require a member ID
   assert.doesNotMatch(page, /name="member_id"/);
 });
 
+test("family financial sessions are not silently reused after leaving the portal", () => {
+  assert.match(script, /storage:\s*window\.sessionStorage/);
+  assert.match(script, /storageKey:\s*AUTH_STORAGE_KEY/);
+  assert.match(script, /localStorage\.removeItem\(LEGACY_AUTH_STORAGE_KEY\)/);
+  assert.match(script, /addEventListener\("pagehide"/);
+  assert.match(script, /signOut\(\{ scope: "local" \}\)/);
+});
+
 test("portal access is derived from the verified session email without broad table policies", () => {
   assert.match(migration, /auth\.uid\(\) is null/);
   assert.match(migration, /auth\.jwt\(\) ->> 'email'/);
