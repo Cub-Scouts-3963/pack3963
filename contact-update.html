@@ -1,0 +1,29 @@
+---
+layout: default
+title: Update Contact Information | Cub Scout Pack 3963
+description: Securely submit updated Pack 3963 family contact information.
+robots: noindex, nofollow
+styles:
+- /family-account.css
+---
+<header class="family-hero"><div class="family-hero__inner"><img src="{{ '/assets/images/cubscoutlogo.png' | relative_url }}" alt="Cub Scout Pack 3963" class="family-hero__mark"><div><p class="family-eyebrow">Secure family access</p><h1>Update contact information</h1><p>Submit changes for Pack leadership to review before they are applied to Pack records.</p></div></div></header>
+<main class="family-shell">
+<section class="family-card family-auth">
+<p class="family-eyebrow">Parent update request</p><h2>Tell us what changed</h2>
+<p>Your request will be reviewed by Pack leadership. Google Contacts will be updated after approval.</p>
+<form id="contact-update-form" class="family-login-form">
+<label>Parent or guardian name<input name="full_name" required autocomplete="name"></label>
+<label>Email address<input name="email" type="email" required autocomplete="email"></label>
+<label>Phone number<input name="phone" type="tel" required autocomplete="tel"></label>
+<label>Street address<input name="street" autocomplete="street-address"></label>
+<label>City<input name="city" autocomplete="address-level2"></label>
+<label>State<input name="region" maxlength="2" autocomplete="address-level1"></label>
+<label>ZIP code<input name="postal_code" autocomplete="postal-code"></label>
+<label>Scout and den information<textarea name="scouts" rows="4" placeholder="Example: Benjamin Weninger — Wolves"></textarea></label>
+<label>Additional notes<textarea name="notes" rows="4"></textarea></label>
+<button class="btn-blue" type="submit">Submit update for review</button>
+<p class="family-status" id="contact-update-status" role="status"></p>
+</form></section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js"></script>
+<script src="{{ '/assets/js/contact-update.js' | relative_url }}?v={{ site.asset_version }}"></script>
