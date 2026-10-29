@@ -7,7 +7,7 @@ const ACTIONS = {
   email_change: ["Confirm your Pack 3963 email change", "ACCOUNT UPDATE", "Confirm your email change", "Use the secure button below to confirm this email address for your Pack 3963 account.", "Confirm email change"],
   reauthentication: ["Confirm your Pack 3963 account", "SECURITY CHECK", "Confirm it is you", "Use the secure button below to complete this security check for your Pack 3963 account.", "Confirm account"]
 };
-const DEFAULT_COPY = ACTIONS.magiclink;
+const PARENT_ACTIONS = {\n  signup: ["Your one-time Pack 3963 Parent Portal sign-in link", "PARENT PORTAL", "Here is your one-time parent portal sign-in link", "Use the secure button below to sign in to the Cub Scouts Pack 3963 Parent Portal.", "Sign in to the Parent Portal"],\n  magiclink: ["Your one-time Pack 3963 Parent Portal sign-in link", "PARENT PORTAL", "Here is your one-time parent portal sign-in link", "Use the secure button below to sign in to the Cub Scouts Pack 3963 Parent Portal.", "Sign in to the Parent Portal"]\n};\nconst DEFAULT_COPY = ACTIONS.magiclink;
 const MAX_BODY = 65536;
 const SKEW = 300;
 const RECEIPT_SYNC_PATH = "/api/treasurer/receipt-drive-sync";
@@ -661,7 +661,7 @@ function getDeliveries(event, action) {
   return out;
 }
 function validEmail(v) { return typeof v === "string" && v.length <= 320 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
-function verifyUrl(base, hash, type, redirect) {
+function isParentRedirect(redirect) {\n  try {\n    const path = new URL(redirect || "").pathname;\n    return path === "/family-account.html" || path === "/contact-update.html" || path === "/family-account";\n  } catch { return false; }\n}\nfunction verifyUrl(base, hash, type, redirect) {
   const url = new URL("/auth/v1/verify", base);
   url.searchParams.set("token", hash);
   url.searchParams.set("type", type);
