@@ -1,6 +1,8 @@
 import { HEADERS, purposeCatalog, templateRows, csvText, parseCsv, reviewRows, workbookTemplate } from "./treasury-transfers.mjs";
 
-const sb = window.supabase.createClient("https://buvrqioskjjhszqkpypa.supabase.co", "sb_publishable_I15v7OgXeqzJCCg-r7RwRw_ievTWP8V");
+const sb = window.supabase.createClient("https://buvrqioskjjhszqkpypa.supabase.co", "sb_publishable_I15v7OgXeqzJCCg-r7RwRw_ievTWP8V", {
+  auth: { persistSession: true, storage: window.sessionStorage, storageKey: "pack3963-treasurer-session", detectSessionInUrl: true, autoRefreshToken: true }
+});
 const $ = s => document.querySelector(s);
 const esc = v => String(v ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const money = v => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(v || 0) / 100);

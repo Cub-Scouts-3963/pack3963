@@ -8,8 +8,17 @@
   const INVOICE_DRIVE_SYNC_API = "https://pack3963-auth-email.cubscouts3963.workers.dev/api/treasurer/invoice-drive-sync";
   const TREASURER_EMAIL_API = "https://pack3963-treasury-email.cubscouts3963.workers.dev/api/treasurer/send-email";
   const CREATE_INVOICE_API = "https://pack3963-treasury-email.cubscouts3963.workers.dev/api/treasurer/create-invoice";
+  const AUTH_STORAGE_KEY = "pack3963-treasurer-session";
+  const LEGACY_AUTH_STORAGE_KEY = "sb-buvrqioskjjhszqkpypa-auth-token";
+  try { window.localStorage.removeItem(LEGACY_AUTH_STORAGE_KEY); } catch (_) { /* Storage may be unavailable. */ }
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
-    auth: { persistSession: true, detectSessionInUrl: true, autoRefreshToken: true }
+    auth: {
+      persistSession: true,
+      storage: window.sessionStorage,
+      storageKey: AUTH_STORAGE_KEY,
+      detectSessionInUrl: true,
+      autoRefreshToken: true
+    }
   });
   const state = { user: null, access: null, accounts: [], entries: [], expenses: [], receipts: [], summary: null, users: [], audit: [], householdContacts: [], importRows: [], rosterRows: [], rosterHouseholds: [], rosterFileName: "", activeLedgerId: null, driveReviewStarted: false };
   const $ = (selector) => document.querySelector(selector);
@@ -34,7 +43,8 @@
   }
 
   async function signOut() {
-    await client.auth.signOut();
+    await client.auth.signOut({ scope: "local" });
+    window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
     state.user = null; state.access = null;
     $("#treasurer-app").hidden = true;
     $("#access-panel").hidden = true;
@@ -1160,6 +1170,9 @@
   }
 
   document.addEventListener("DOMContentLoaded", async () => {
+    window.addEventListener("pagehide", () => {
+      window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    });
     window.addEventListener("treasury-imported", loadAll);
     setDefaults();
     $("#login-form").addEventListener("submit", async event => {

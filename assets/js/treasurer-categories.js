@@ -3,7 +3,7 @@
   const SB_URL = "https://buvrqioskjjhszqkpypa.supabase.co";
   const SB_KEY = "sb_publishable_I15v7OgXeqzJCCg-r7RwRw_ievTWP8V";
   const client = window.supabase.createClient(SB_URL, SB_KEY, {
-    auth: { persistSession: true, detectSessionInUrl: true, autoRefreshToken: true }
+    auth: { persistSession: true, storage: window.sessionStorage, storageKey: "pack3963-treasurer-session", detectSessionInUrl: true, autoRefreshToken: true }
   });
   const state = { categories: [], access: null };
   const $ = selector => document.querySelector(selector);

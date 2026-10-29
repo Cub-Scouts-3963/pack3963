@@ -1,0 +1,129 @@
+---
+layout: default
+title: Family Account | Cub Scout Pack 3963
+description: Securely review your Pack 3963 family balance, account activity, and official invoices.
+robots: noindex, nofollow
+styles:
+- /family-account.css
+---
+
+<header class="family-hero">
+  <div class="family-hero__inner">
+    <img src="{{ '/assets/images/cubscoutlogo.png' | relative_url }}" alt="Cub Scout Pack 3963" class="family-hero__mark">
+    <div>
+      <p class="family-eyebrow">Secure family access</p>
+      <h1>Pack 3963 Family Account</h1>
+      <p>Review your family’s balance, Scout-related charges, payments, and official invoices in one place.</p>
+    </div>
+  </div>
+</header>
+
+<main class="family-shell" id="family-account-portal">
+  <section class="family-auth family-card" id="family-auth-panel">
+    <div class="family-auth__intro">
+      <p class="family-eyebrow">No password required</p>
+      <h2>Send me a secure sign-in link</h2>
+      <p>Use an email address currently listed for your Pack family. We will email a one-time link to open your account.</p>
+    </div>
+    <form id="family-login-form" class="family-login-form">
+      <label for="family-login-email">Parent or guardian email</label>
+      <div class="family-login-row">
+        <input id="family-login-email" name="email" type="email" autocomplete="email" required placeholder="parent@example.com">
+        <button class="btn-blue" type="submit">Email my sign-in link</button>
+      </div>
+    </form>
+    <p class="family-status" id="family-login-status" role="status"></p>
+    <div class="family-privacy-note">
+      <strong>Your family’s information stays private.</strong>
+      <span>The email link verifies your address before any account information is displayed.</span>
+    </div>
+  </section>
+
+  <section class="family-card family-loading" id="family-loading" hidden role="status">
+    <span class="family-spinner" aria-hidden="true"></span>
+    <div><h2>Opening your family account</h2><p>We’re securely matching your email to the Pack roster.</p></div>
+  </section>
+
+  <section class="family-card family-empty" id="family-empty" hidden>
+    <p class="family-eyebrow">We could not match this email</p>
+    <h2>Your sign-in worked, but no family account is connected yet.</h2>
+    <p>This usually means the Pack has a different parent or guardian email on file. We can update your family contact and connect the account.</p>
+    <div class="family-actions">
+      <a class="btn-blue" href="mailto:cubscouts3963@gmail.com?subject=Help%20with%20my%20Pack%203963%20family%20account">Ask Pack 3963 for help</a>
+      <button class="btn-secondary" id="family-empty-sign-out" type="button">Sign out</button>
+    </div>
+  </section>
+
+  <div id="family-account-app" hidden>
+    <div class="family-toolbar">
+      <div>
+        <p class="family-eyebrow">Family account</p>
+        <h2 id="family-welcome">Welcome</h2>
+        <p id="family-signed-in"></p>
+      </div>
+      <div class="family-actions">
+        <button class="btn-secondary" id="family-refresh" type="button">Refresh</button>
+        <button class="btn-secondary" id="family-sign-out" type="button">Sign out</button>
+      </div>
+    </div>
+
+    <label class="family-switcher" id="family-switcher-wrap" hidden>
+      Family account
+      <select id="family-switcher"></select>
+    </label>
+
+    <section class="family-balance-card" aria-labelledby="family-balance-label">
+      <div>
+        <span id="family-balance-label">Current family balance</span>
+        <strong id="family-balance">$0.00</strong>
+        <small id="family-balance-status">Paid / even</small>
+      </div>
+      <div class="family-balance-card__meta">
+        <span>Total charges <strong id="family-total-charges">$0.00</strong></span>
+        <span>Payments &amp; credits <strong id="family-total-payments">$0.00</strong></span>
+      </div>
+    </section>
+
+    <section class="family-card" aria-labelledby="family-scouts-heading">
+      <div class="family-section-heading">
+        <div><p class="family-eyebrow">Your household</p><h2 id="family-scouts-heading">Scouts</h2></div>
+        <span id="family-scout-count" class="family-count"></span>
+      </div>
+      <div id="family-scouts" class="family-scout-grid"></div>
+    </section>
+
+    <section class="family-card" aria-labelledby="family-activity-heading">
+      <div class="family-section-heading family-section-heading--activity">
+        <div><p class="family-eyebrow">Account details</p><h2 id="family-activity-heading">Charges and payments</h2></div>
+        <label>Show activity for<select id="family-activity-filter"><option value="all">Entire family</option></select></label>
+      </div>
+      <div class="family-table-wrap">
+        <table class="family-ledger-table">
+          <thead><tr><th>Date</th><th>For</th><th>Description</th><th>Type</th><th class="family-money">Amount</th></tr></thead>
+          <tbody id="family-ledger"></tbody>
+        </table>
+      </div>
+      <p class="family-table-note">Family-level payments and credits are included in the consolidated balance above.</p>
+    </section>
+
+    <section class="family-card" aria-labelledby="family-invoices-heading">
+      <div class="family-section-heading">
+        <div><p class="family-eyebrow">Official documents</p><h2 id="family-invoices-heading">Invoices</h2></div>
+        <span id="family-invoice-count" class="family-count"></span>
+      </div>
+      <div id="family-invoices" class="family-invoice-list"></div>
+      <div class="family-payment-note">
+        <strong>Ready to pay?</strong>
+        <span>Your official invoice includes the current Pack payment instructions and the memo information needed by the Treasurer.</span>
+      </div>
+    </section>
+
+    <section class="family-help-card">
+      <div><p class="family-eyebrow">Questions or corrections</p><h2>Does something look wrong?</h2><p>Contact the Pack before sending payment so we can correct the family ledger.</p></div>
+      <a class="btn-secondary" href="mailto:cubscouts3963@gmail.com?subject=Pack%203963%20family%20account%20question">Email Pack 3963</a>
+    </section>
+  </div>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js"></script>
+<script src="{{ '/assets/js/family-account.js' | relative_url }}?v={{ site.asset_version }}"></script>
