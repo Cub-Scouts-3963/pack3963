@@ -7,6 +7,10 @@ const ACTIONS = {
   email_change: ["Confirm your Pack 3963 email change", "ACCOUNT UPDATE", "Confirm your email change", "Use the secure button below to confirm this email address for your Pack 3963 account.", "Confirm email change"],
   reauthentication: ["Confirm your Pack 3963 account", "SECURITY CHECK", "Confirm it is you", "Use the secure button below to complete this security check for your Pack 3963 account.", "Confirm account"]
 };
+const PARENT_ACTIONS = {
+  signup: ["Your one-time Pack 3963 Parent Portal sign-in link", "PARENT PORTAL", "Here is your one-time parent portal sign-in link", "Use the secure button below to sign in to the Cub Scouts Pack 3963 Parent Portal.", "Sign into the Parent Portal"],
+  magiclink: ["Your one-time Pack 3963 Parent Portal sign-in link", "PARENT PORTAL", "Here is your one-time parent portal sign-in link", "Use the secure button below to sign in to the Cub Scouts Pack 3963 Parent Portal.", "Sign into the Parent Portal"]
+};
 const DEFAULT_COPY = ACTIONS.magiclink;
 const MAX_BODY = 65536;
 const SKEW = 300;
@@ -55,7 +59,9 @@ export default {
     catch { return Response.json({ error: "invalid_json" }, { status: 400 }); }
 
     const action = event?.email_data?.email_action_type;
-    const copy = ACTIONS[action] || DEFAULT_COPY;
+    const isParentPortal = isParentRedirect(event?.email_data?.redirect_to);
+    const copy = (isParentPortal ? PARENT_ACTIONS[action] : ACTIONS[action]) || DEFAULT_COPY;
+    const sender = isParentPortal ? (env.PARENT_PORTAL_FROM_EMAIL || env.FROM_EMAIL) : env.FROM_EMAIL;
     const sentAt = Number(request.headers.get("webhook-timestamp")) || Math.floor(Date.now() / 1000);
     const ttl = Math.max(1, Number(env.LINK_TTL_MINUTES || 60));
     const expiry = formatChicago(new Date((sentAt + ttl * 60) * 1000));
@@ -75,8 +81,9 @@ export default {
           "idempotency-key": (request.headers.get("webhook-id") || crypto.randomUUID()) + ":" + delivery.kind
         },
         body: JSON.stringify({
-          from: env.FROM_EMAIL,
+          from: sender,
           to: [delivery.email],
+          reply_to: env.SUPPORT_EMAIL,
           subject: copy[0],
           html: htmlEmail(copy, link, expiry, ttl, env.SUPPORT_EMAIL),
           text: textEmail(copy, link, expiry, ttl, env.SUPPORT_EMAIL)
@@ -661,6 +668,12 @@ function getDeliveries(event, action) {
   return out;
 }
 function validEmail(v) { return typeof v === "string" && v.length <= 320 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
+function isParentRedirect(redirect) {
+  try {
+    const path = new URL(redirect || "").pathname;
+    return path === "/family-account.html" || path === "/contact-update.html" || path === "/family-account";
+  } catch { return false; }
+}
 function verifyUrl(base, hash, type, redirect) {
   const url = new URL("/auth/v1/verify", base);
   url.searchParams.set("token", hash);
@@ -721,5 +734,5 @@ function htmlEmail(copy, link, expiry, ttl, support) {
 <tr><td style="background:#003f75;color:#d9ecff;padding:18px 32px;font-size:12px;">Cub Scout Pack 3963 · Chicago, Illinois</td></tr></table></td></tr></table></body></html>`;
 }
 function textEmail(copy, link, expiry, ttl, support) {
-  return ["CUB SCOUT PACK 3963 — TREASURER PORTAL", "", copy[2], "", copy[3], "", copy[4] + ":", link, "", "This link expires at " + expiry + " (" + ttl + " minutes after this email was sent).", "", "If you did not request this email, you can safely ignore it.", "Questions? Contact " + support].join("\\n");
+  return [copy[1] === "PARENT PORTAL" ? "CUB SCOUTS PACK 3963 — PARENT PORTAL" : "CUB SCOUT PACK 3963 — TREASURER PORTAL", "", copy[2], "", copy[3], "", copy[4] + ":", link, "", "This link expires at " + expiry + " (" + ttl + " minutes after this email was sent).", "", "If you did not request this email, you can safely ignore it.", "Questions? Contact " + support].join("\\n");
 }
