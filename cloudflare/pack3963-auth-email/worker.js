@@ -504,8 +504,7 @@ async function uploadDriveDocument(accessToken, html, filename, folderId) {
     "",
     html,
     "--" + boundary + "--"
-  ].join("\r
-");
+  ].join("\\r\\n");
   return googleFetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,parents", accessToken, {
     method: "POST",
     headers: { "content-type": "multipart/related; boundary=" + boundary },
