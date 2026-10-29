@@ -8,8 +8,8 @@ const ACTIONS = {
   reauthentication: ["Confirm your Pack 3963 account", "SECURITY CHECK", "Confirm it is you", "Use the secure button below to complete this security check for your Pack 3963 account.", "Confirm account"]
 };
 const PARENT_ACTIONS = {
-  signup: ["Your one-time Pack 3963 Parent Portal sign-in link", "PARENT PORTAL", "Here is your one-time parent portal sign-in link", "Use the secure button below to sign in to the Cub Scouts Pack 3963 Parent Portal.", "Sign in to the Parent Portal"],
-  magiclink: ["Your one-time Pack 3963 Parent Portal sign-in link", "PARENT PORTAL", "Here is your one-time parent portal sign-in link", "Use the secure button below to sign in to the Cub Scouts Pack 3963 Parent Portal.", "Sign in to the Parent Portal"]
+  signup: ["Your one-time Pack 3963 Parent Portal sign-in link", "PARENT PORTAL", "Here is your one-time parent portal sign-in link", "Use the secure button below to sign in to the Cub Scouts Pack 3963 Parent Portal.", "Sign into the Parent Portal"],
+  magiclink: ["Your one-time Pack 3963 Parent Portal sign-in link", "PARENT PORTAL", "Here is your one-time parent portal sign-in link", "Use the secure button below to sign in to the Cub Scouts Pack 3963 Parent Portal.", "Sign into the Parent Portal"]
 };
 const DEFAULT_COPY = ACTIONS.magiclink;
 const MAX_BODY = 65536;
