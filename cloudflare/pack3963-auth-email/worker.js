@@ -7,7 +7,11 @@ const ACTIONS = {
   email_change: ["Confirm your Pack 3963 email change", "ACCOUNT UPDATE", "Confirm your email change", "Use the secure button below to confirm this email address for your Pack 3963 account.", "Confirm email change"],
   reauthentication: ["Confirm your Pack 3963 account", "SECURITY CHECK", "Confirm it is you", "Use the secure button below to complete this security check for your Pack 3963 account.", "Confirm account"]
 };
-const PARENT_ACTIONS = {\n  signup: ["Your one-time Pack 3963 Parent Portal sign-in link", "PARENT PORTAL", "Here is your one-time parent portal sign-in link", "Use the secure button below to sign in to the Cub Scouts Pack 3963 Parent Portal.", "Sign in to the Parent Portal"],\n  magiclink: ["Your one-time Pack 3963 Parent Portal sign-in link", "PARENT PORTAL", "Here is your one-time parent portal sign-in link", "Use the secure button below to sign in to the Cub Scouts Pack 3963 Parent Portal.", "Sign in to the Parent Portal"]\n};\nconst DEFAULT_COPY = ACTIONS.magiclink;
+const PARENT_ACTIONS = {
+  signup: ["Your one-time Pack 3963 Parent Portal sign-in link", "PARENT PORTAL", "Here is your one-time parent portal sign-in link", "Use the secure button below to sign in to the Cub Scouts Pack 3963 Parent Portal.", "Sign in to the Parent Portal"],
+  magiclink: ["Your one-time Pack 3963 Parent Portal sign-in link", "PARENT PORTAL", "Here is your one-time parent portal sign-in link", "Use the secure button below to sign in to the Cub Scouts Pack 3963 Parent Portal.", "Sign in to the Parent Portal"]
+};
+const DEFAULT_COPY = ACTIONS.magiclink;
 const MAX_BODY = 65536;
 const SKEW = 300;
 const RECEIPT_SYNC_PATH = "/api/treasurer/receipt-drive-sync";
@@ -55,7 +59,9 @@ export default {
     catch { return Response.json({ error: "invalid_json" }, { status: 400 }); }
 
     const action = event?.email_data?.email_action_type;
-    const copy = ACTIONS[action] || DEFAULT_COPY;
+    const isParentPortal = isParentRedirect(event?.email_data?.redirect_to);
+    const copy = (isParentPortal ? PARENT_ACTIONS[action] : ACTIONS[action]) || DEFAULT_COPY;
+    const sender = isParentPortal ? (env.PARENT_PORTAL_FROM_EMAIL || env.FROM_EMAIL) : env.FROM_EMAIL;
     const sentAt = Number(request.headers.get("webhook-timestamp")) || Math.floor(Date.now() / 1000);
     const ttl = Math.max(1, Number(env.LINK_TTL_MINUTES || 60));
     const expiry = formatChicago(new Date((sentAt + ttl * 60) * 1000));
@@ -75,8 +81,9 @@ export default {
           "idempotency-key": (request.headers.get("webhook-id") || crypto.randomUUID()) + ":" + delivery.kind
         },
         body: JSON.stringify({
-          from: env.FROM_EMAIL,
+          from: sender,
           to: [delivery.email],
+          reply_to: env.SUPPORT_EMAIL,
           subject: copy[0],
           html: htmlEmail(copy, link, expiry, ttl, env.SUPPORT_EMAIL),
           text: textEmail(copy, link, expiry, ttl, env.SUPPORT_EMAIL)
@@ -497,7 +504,8 @@ async function uploadDriveDocument(accessToken, html, filename, folderId) {
     "",
     html,
     "--" + boundary + "--"
-  ].join("\r\n");
+  ].join("\r
+");
   return googleFetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,parents", accessToken, {
     method: "POST",
     headers: { "content-type": "multipart/related; boundary=" + boundary },
@@ -522,7 +530,8 @@ export function invoiceDocumentHtml(invoice) {
     return "<tr><td>" + esc(item.occurred_on || "") + "</td><td><strong>" + esc(item.description || "") + "</strong><br><small>" + (item.category ? esc(item.category) : "") + "</small></td><td>" + esc(item.account_name || "") + "</td><td style='text-align:right'>" + (signed < 0 ? "−" : "") + formatDriveMoney(Math.abs(signed)) + "</td></tr>";
   }).join("");
   const scoutLine = scouts.length ? scouts.map(scout => esc(scout.name) + (scout.den ? " — " + esc(scout.den) : "")).join(", ") : "";
-  return "<!doctype html><html><head><meta charset='utf-8'><style>body{font-family:Arial,sans-serif;color:#243447;max-width:760px;margin:28px auto}header{display:flex;gap:22px;padding:22px 0;border-top:10px solid #f7c600;border-bottom:3px solid #004b8d}header img{width:110px;height:auto}.brand h1{margin:0;color:#004b8d}.brand p{margin:3px 0;color:#607284}.details{margin-left:auto;text-align:right}.details strong{display:block;color:#004b8d;font-size:24px}.bill{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin:24px 0}.bill div:last-child{padding-left:18px;border-left:5px solid #f7c600}.label{color:#607284;font-size:11px;font-weight:bold;text-transform:uppercase}.message{padding:12px 14px;border-left:5px solid #004b8d;background:#f4f8fc}.balance{font-size:24px;color:#004b8d;font-weight:700}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{padding:10px;border-bottom:1px solid #d8e0e8;text-align:left}th{background:#eef3f8}.totals{width:330px;margin:20px 0 0 auto}.totals p{display:flex;justify-content:space-between}.totals .balance{padding-top:12px;border-top:4px solid #f7c600}.payment{margin-top:24px;padding:16px;border-left:6px solid #f7c600;background:#fff8d9}footer{margin-top:30px;padding-top:10px;border-top:2px solid #f7c600;color:#607284;font-size:12px}</style></head><body><header><img src='https://www.pack3963.com/assets/images/cubscoutlogo.png' alt='Pack 3963'><div class='brand'><h1>Cub Scout Pack 3963</h1><p>Pathway to Adventure Council • Scouting America</p><p>c/o Eden United Church of Christ</p><p>5051 W. Gunnison Street • Chicago, IL 60630</p><p>" + esc(invoice.support_email || "cubscouts3963@gmail.com") + " • pack3963.com</p></div><div class='details'><strong>INVOICE</strong><p># " + esc(invoice.invoice_number || "") + "</p><p>Issued: " + esc(invoice.invoice_date || "") + "</p><p>Due: " + esc(invoice.due_date || "") + "</p></div></header><section class='bill'><div><span class='label'>Bill to</span><h2>" + esc(invoice.bill_to || invoice.family_name || "Family account") + "</h2><p>" + esc(invoice.family_name || "") + "</p><p>" + scoutLine + "</p></div><div><span class='label'>Chartered organization</span><h2>Eden United Church of Christ</h2><p>5051 W. Gunnison Street<br>Chicago, IL 60630</p></div></section><p class='message'>" + esc(invoice.body_text || "").replace(/\n/g, "<br>") + "</p><table><thead><tr><th>Date</th><th>Description</th><th>Account</th><th style='text-align:right'>Amount</th></tr></thead><tbody>" + rows + "</tbody></table><section class='totals'><p><span>Charges</span><strong>" + formatDriveMoney(charges) + "</strong></p><p><span>Payments / credits</span><strong>−" + formatDriveMoney(credits) + "</strong></p><p class='balance'><span>Balance due</span><strong>" + formatDriveMoney(invoice.balance_cents) + "</strong></p></section><section class='payment'><strong>Payment instructions</strong><p>Pay with cash at a Pack meeting or send Zelle to " + esc(invoice.payment_instructions || "the Pack Treasurer") + " (Kevin Goldsmith, Pack Treasurer). Include the family name and invoice number in the memo.</p></section><footer>Cub Scout Pack 3963 • c/o Eden United Church of Christ • 5051 W. Gunnison Street, Chicago, IL 60630<br>Pathway to Adventure Council • Scouting America</footer></body></html>";
+  return "<!doctype html><html><head><meta charset='utf-8'><style>body{font-family:Arial,sans-serif;color:#243447;max-width:760px;margin:28px auto}header{display:flex;gap:22px;padding:22px 0;border-top:10px solid #f7c600;border-bottom:3px solid #004b8d}header img{width:110px;height:auto}.brand h1{margin:0;color:#004b8d}.brand p{margin:3px 0;color:#607284}.details{margin-left:auto;text-align:right}.details strong{display:block;color:#004b8d;font-size:24px}.bill{display:grid;grid-template-columns:1fr 1fr;gap:28px;margin:24px 0}.bill div:last-child{padding-left:18px;border-left:5px solid #f7c600}.label{color:#607284;font-size:11px;font-weight:bold;text-transform:uppercase}.message{padding:12px 14px;border-left:5px solid #004b8d;background:#f4f8fc}.balance{font-size:24px;color:#004b8d;font-weight:700}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{padding:10px;border-bottom:1px solid #d8e0e8;text-align:left}th{background:#eef3f8}.totals{width:330px;margin:20px 0 0 auto}.totals p{display:flex;justify-content:space-between}.totals .balance{padding-top:12px;border-top:4px solid #f7c600}.payment{margin-top:24px;padding:16px;border-left:6px solid #f7c600;background:#fff8d9}footer{margin-top:30px;padding-top:10px;border-top:2px solid #f7c600;color:#607284;font-size:12px}</style></head><body><header><img src='https://www.pack3963.com/assets/images/cubscoutlogo.png' alt='Pack 3963'><div class='brand'><h1>Cub Scout Pack 3963</h1><p>Pathway to Adventure Council • Scouting America</p><p>c/o Eden United Church of Christ</p><p>5051 W. Gunnison Street • Chicago, IL 60630</p><p>" + esc(invoice.support_email || "cubscouts3963@gmail.com") + " • pack3963.com</p></div><div class='details'><strong>INVOICE</strong><p># " + esc(invoice.invoice_number || "") + "</p><p>Issued: " + esc(invoice.invoice_date || "") + "</p><p>Due: " + esc(invoice.due_date || "") + "</p></div></header><section class='bill'><div><span class='label'>Bill to</span><h2>" + esc(invoice.bill_to || invoice.family_name || "Family account") + "</h2><p>" + esc(invoice.family_name || "") + "</p><p>" + scoutLine + "</p></div><div><span class='label'>Chartered organization</span><h2>Eden United Church of Christ</h2><p>5051 W. Gunnison Street<br>Chicago, IL 60630</p></div></section><p class='message'>" + esc(invoice.body_text || "").replace(/
+/g, "<br>") + "</p><table><thead><tr><th>Date</th><th>Description</th><th>Account</th><th style='text-align:right'>Amount</th></tr></thead><tbody>" + rows + "</tbody></table><section class='totals'><p><span>Charges</span><strong>" + formatDriveMoney(charges) + "</strong></p><p><span>Payments / credits</span><strong>−" + formatDriveMoney(credits) + "</strong></p><p class='balance'><span>Balance due</span><strong>" + formatDriveMoney(invoice.balance_cents) + "</strong></p></section><section class='payment'><strong>Payment instructions</strong><p>Pay with cash at a Pack meeting or send Zelle to " + esc(invoice.payment_instructions || "the Pack Treasurer") + " (Kevin Goldsmith, Pack Treasurer). Include the family name and invoice number in the memo.</p></section><footer>Cub Scout Pack 3963 • c/o Eden United Church of Christ • 5051 W. Gunnison Street, Chicago, IL 60630<br>Pathway to Adventure Council • Scouting America</footer></body></html>";
 }
 
 function formatDriveMoney(cents) {
@@ -632,19 +641,36 @@ function treasurerActivityHtml(activity,mode){
   const rows=activity.map(x=>"<tr><td style='padding:9px 8px;border-bottom:1px solid #d8e0e8;font-size:13px'>"+esc(x.occurred_on)+"</td><td style='padding:9px 8px;border-bottom:1px solid #d8e0e8;font-size:13px'><strong>"+esc(x.description)+"</strong><br><span style='color:#607284'>"+esc(x.account_name)+(x.category?" · "+esc(x.category):"")+"</span></td><td align='right' style='padding:9px 8px;border-bottom:1px solid #d8e0e8;font-size:13px;font-weight:700;color:"+(activityAmount(x)>0?"#a1122f":"#24633f")+"'>"+(activityAmount(x)>0?"+":"−")+fmtMoney(Math.abs(activityAmount(x)))+"</td></tr>").join("");
   return "<h2 style='color:#004b8d;font-size:19px;margin:24px 0 10px'>"+(mode==="ledger"?"Selected account details":"Recent account activity")+"</h2><table role='presentation' width='100%' cellspacing='0' cellpadding='0' border='0'><tr><th align='left' style='padding:8px;background:#eef3f8;font-size:12px'>DATE</th><th align='left' style='padding:8px;background:#eef3f8;font-size:12px'>DETAIL</th><th align='right' style='padding:8px;background:#eef3f8;font-size:12px'>AMOUNT</th></tr>"+rows+"</table>";
 }
-function treasurerActivityText(activity,mode){return activity?.length?"\n\n"+(mode==="ledger"?"SELECTED ACCOUNT DETAILS":"RECENT ACCOUNT ACTIVITY")+"\n"+activity.map(x=>x.occurred_on+" | "+x.account_name+" | "+x.description+" | "+(activityAmount(x)>0?"+":"-")+fmtMoney(Math.abs(activityAmount(x)))).join("\n"):""}
+function treasurerActivityText(activity,mode){return activity?.length?"
+
+"+(mode==="ledger"?"SELECTED ACCOUNT DETAILS":"RECENT ACCOUNT ACTIVITY")+"
+"+activity.map(x=>x.occurred_on+" | "+x.account_name+" | "+x.description+" | "+(activityAmount(x)>0?"+":"-")+fmtMoney(Math.abs(activityAmount(x)))).join("
+"):""}
 function paymentHtml(zelle){
   if(!zelle)return "";
   return "<div style='margin:22px 0;padding:18px;background:#fff8d9;border-left:5px solid #f7c600;border-radius:7px'><div style='font-size:13px;font-weight:800;color:#004b8d;letter-spacing:.4px'>PAYMENT OPTIONS</div><p style='font-size:15px;line-height:1.55;margin:8px 0 0'>Pay with cash at a Pack meeting or send Zelle to <strong>"+esc(zelle)+"</strong> (Kevin Goldsmith, Pack Treasurer). Include your family name and what the payment covers in the memo.</p></div>";
 }
-function paymentText(zelle){return zelle?"\n\nPAYMENT OPTIONS\nPay with cash at a Pack meeting or send Zelle to "+zelle+" (Kevin Goldsmith, Pack Treasurer). Include your family name and what the payment covers in the memo.":""}
+function paymentText(zelle){return zelle?"
+
+PAYMENT OPTIONS
+Pay with cash at a Pack meeting or send Zelle to "+zelle+" (Kevin Goldsmith, Pack Treasurer). Include your family name and what the payment covers in the memo.":""}
 function emailLogo(){return "<img src='https://www.pack3963.com/assets/images/cubscoutlogo.png' width='170' alt='Cub Scout Pack 3963' style='display:block;width:170px;max-width:100%;height:auto;border:0;margin:0 auto 10px'>"}
 function treasurerHtml(contact,family,subject,body,due,activity,support,zelle,mode){
-  const ps=String(body).split(/\n{2,}/).map(p=>"<p style='font-size:16px;line-height:1.6;margin:0 0 16px'>"+esc(p).replace(/\n/g,"<br>")+"</p>").join("");
+  const ps=String(body).split(/
+{2,}/).map(p=>"<p style='font-size:16px;line-height:1.6;margin:0 0 16px'>"+esc(p).replace(/
+/g,"<br>")+"</p>").join("");
   const bal=due==null?"":"<div style='margin:20px 0;padding:18px;background:#f4f8fc;border-left:5px solid #d71920;border-radius:7px'><div style='font-size:13px;font-weight:800;color:#526474'>CURRENT FAMILY BALANCE DUE</div><div style='font-size:30px;font-weight:800;color:#004b8d;margin-top:4px'>"+fmtMoney(due)+"</div><div style='font-size:13px;color:#607284;margin-top:4px'>"+esc(family)+"</div></div>";
   return "<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'><title>"+esc(subject)+"</title></head><body style='margin:0;background:#eef3f8;color:#243447;font-family:Arial,Helvetica,sans-serif'><div style='display:none;max-height:0;overflow:hidden'>Pack 3963 family account details for "+esc(family)+"</div><table width='100%' cellspacing='0' cellpadding='0' role='presentation' style='background:#eef3f8;padding:24px 12px'><tr><td align='center'><table width='100%' cellspacing='0' cellpadding='0' role='presentation' style='max-width:620px;background:#fff;border-radius:15px;overflow:hidden'><tr><td align='center' style='background:#004b8d;padding:22px 30px;border-bottom:8px solid #f7c600;color:#fff'>"+emailLogo()+"<div style='font-size:15px;font-weight:700'>Pack Treasurer</div></td></tr><tr><td style='padding:30px'><div style='color:#d71920;font-size:12px;font-weight:800;letter-spacing:1px'>FAMILY ACCOUNT</div><h1 style='color:#004b8d;font-size:25px;margin:8px 0 18px'>"+esc(subject)+"</h1><p style='font-size:16px;line-height:1.6'>Hello "+esc(contact)+",</p>"+ps+bal+treasurerActivityHtml(activity,mode)+paymentHtml(zelle)+"<p style='font-size:13px;color:#607284;margin-top:24px'>Questions? Reply or contact <a href='mailto:"+esc(support)+"'>"+esc(support)+"</a>.</p></td></tr><tr><td style='background:#003f75;color:#d9ecff;padding:17px 30px;font-size:12px'>Cub Scout Pack 3963 · Chicago, Illinois</td></tr></table></td></tr></table></body></html>"
 }
-function treasurerText(contact,family,body,due,activity,support,zelle,mode){return "CUB SCOUT PACK 3963\n\nHello "+contact+",\n\n"+body+(due==null?"":"\n\nCurrent family balance due for "+family+": "+fmtMoney(due))+treasurerActivityText(activity,mode)+paymentText(zelle)+"\n\nQuestions? Contact "+support}
+function treasurerText(contact,family,body,due,activity,support,zelle,mode){return "CUB SCOUT PACK 3963
+
+Hello "+contact+",
+
+"+body+(due==null?"":"
+
+Current family balance due for "+family+": "+fmtMoney(due))+treasurerActivityText(activity,mode)+paymentText(zelle)+"
+
+Questions? Contact "+support}
 
 function getDeliveries(event, action) {
   const user = event?.user || {};
@@ -661,7 +687,13 @@ function getDeliveries(event, action) {
   return out;
 }
 function validEmail(v) { return typeof v === "string" && v.length <= 320 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
-function isParentRedirect(redirect) {\n  try {\n    const path = new URL(redirect || "").pathname;\n    return path === "/family-account.html" || path === "/contact-update.html" || path === "/family-account";\n  } catch { return false; }\n}\nfunction verifyUrl(base, hash, type, redirect) {
+function isParentRedirect(redirect) {
+  try {
+    const path = new URL(redirect || "").pathname;
+    return path === "/family-account.html" || path === "/contact-update.html" || path === "/family-account";
+  } catch { return false; }
+}
+function verifyUrl(base, hash, type, redirect) {
   const url = new URL("/auth/v1/verify", base);
   url.searchParams.set("token", hash);
   url.searchParams.set("type", type);
@@ -721,5 +753,6 @@ function htmlEmail(copy, link, expiry, ttl, support) {
 <tr><td style="background:#003f75;color:#d9ecff;padding:18px 32px;font-size:12px;">Cub Scout Pack 3963 · Chicago, Illinois</td></tr></table></td></tr></table></body></html>`;
 }
 function textEmail(copy, link, expiry, ttl, support) {
-  return ["CUB SCOUT PACK 3963 — TREASURER PORTAL", "", copy[2], "", copy[3], "", copy[4] + ":", link, "", "This link expires at " + expiry + " (" + ttl + " minutes after this email was sent).", "", "If you did not request this email, you can safely ignore it.", "Questions? Contact " + support].join("\\n");
+  return [copy[1] === "PARENT PORTAL" ? "CUB SCOUTS PACK 3963 — PARENT PORTAL" : "CUB SCOUT PACK 3963 — TREASURER PORTAL", "", copy[2], "", copy[3], "", copy[4] + ":", link, "", "This link expires at " + expiry + " (" + ttl + " minutes after this email was sent).", "", "If you did not request this email, you can safely ignore it.", "Questions? Contact " + support].join("\
+");
 }
