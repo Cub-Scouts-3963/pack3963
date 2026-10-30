@@ -79,6 +79,16 @@ events:
     signup_url: /assets/images/eden/2026-fundays-registration-form.jpg
     contact_label: Email completed form
     contact_url: mailto:christianeducation@edenuccchicago.org
+  - id: eden-holiday-craft-fair-2026
+    date: "2026-12-12"
+    date_label: Saturday, December 12
+    title: Eden UCC Holiday Craft Fair
+    time: 9:00 AM–4:00 PM
+    location: Eden United Church of Christ, 5051 W. Gunnison St., Chicago, IL 60630
+    organizer: Eden United Church of Christ
+    description: >-
+      Shop local and celebrate the season at Eden UCC's Holiday Craft Fair in Jefferson Park.
+      The fair will feature local makers, holiday shopping, food, treats, music, and more.
 resources:
   - title: 41st Annual Spaghetti Dinner Flyer
     image: /assets/images/eden/2026-spaghetti-dinner.png
