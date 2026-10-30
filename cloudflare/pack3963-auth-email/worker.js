@@ -7,9 +7,9 @@ const ACTIONS = {
   email_change: ["Confirm your Pack 3963 email change", "ACCOUNT UPDATE", "Confirm your email change", "Use the secure button below to confirm this email address for your Pack 3963 account.", "Confirm email change"],
   reauthentication: ["Confirm your Pack 3963 account", "SECURITY CHECK", "Confirm it is you", "Use the secure button below to complete this security check for your Pack 3963 account.", "Confirm account"]
 };
-const PARENT_ACTIONS = {
-  signup: ["Your one-time Pack 3963 Parent Portal sign-in link", "PARENT PORTAL", "Here is your one-time parent portal sign-in link", "Use the secure button below to sign in to the Cub Scouts Pack 3963 Parent Portal.", "Sign into the Parent Portal"],
-  magiclink: ["Your one-time Pack 3963 Parent Portal sign-in link", "PARENT PORTAL", "Here is your one-time parent portal sign-in link", "Use the secure button below to sign in to the Cub Scouts Pack 3963 Parent Portal.", "Sign into the Parent Portal"]
+const FAMILY_ACTIONS = {
+  signup: ["Your secure Pack 3963 Family Account sign-in link", "FAMILY ACCOUNT", "Open your Pack 3963 Family Account", "Use the secure button below to review your family’s balance, Scout-related charges, payments, and official invoices.", "Open my Family Account"],
+  magiclink: ["Your secure Pack 3963 Family Account sign-in link", "FAMILY ACCOUNT", "Open your Pack 3963 Family Account", "Use the secure button below to review your family’s balance, Scout-related charges, payments, and official invoices.", "Open my Family Account"]
 };
 const DEFAULT_COPY = ACTIONS.magiclink;
 const MAX_BODY = 65536;
@@ -59,9 +59,9 @@ export default {
     catch { return Response.json({ error: "invalid_json" }, { status: 400 }); }
 
     const action = event?.email_data?.email_action_type;
-    const isParentPortal = isParentRedirect(event?.email_data?.redirect_to);
-    const copy = (isParentPortal ? PARENT_ACTIONS[action] : ACTIONS[action]) || DEFAULT_COPY;
-    const sender = isParentPortal ? (env.PARENT_PORTAL_FROM_EMAIL || env.FROM_EMAIL) : env.FROM_EMAIL;
+    const isFamilyPortal = isFamilyRedirect(event?.email_data?.redirect_to);
+    const copy = (isFamilyPortal ? FAMILY_ACTIONS[action] : ACTIONS[action]) || DEFAULT_COPY;
+    const sender = isFamilyPortal ? (env.FAMILY_ACCOUNT_FROM_EMAIL || env.PARENT_PORTAL_FROM_EMAIL || env.FROM_EMAIL) : env.FROM_EMAIL;
     const sentAt = Number(request.headers.get("webhook-timestamp")) || Math.floor(Date.now() / 1000);
     const ttl = Math.max(1, Number(env.LINK_TTL_MINUTES || 60));
     const expiry = formatChicago(new Date((sentAt + ttl * 60) * 1000));
@@ -72,7 +72,7 @@ export default {
     }
 
     for (const delivery of deliveries) {
-      const link = verifyUrl(env.SUPABASE_URL, delivery.hash, action, event.email_data.redirect_to);
+      const link = signInUrl(env.SUPABASE_URL, delivery.hash, action, event.email_data.redirect_to);
       const response = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
@@ -668,11 +668,42 @@ function getDeliveries(event, action) {
   return out;
 }
 function validEmail(v) { return typeof v === "string" && v.length <= 320 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
-function isParentRedirect(redirect) {
+function redirectPath(redirect) {
+  let value = String(redirect || "").trim();
+  for (let i = 0; i < 2; i++) {
+    try {
+      const decoded = decodeURIComponent(value);
+      if (decoded === value) break;
+      value = decoded;
+    } catch { break; }
+  }
   try {
-    const path = new URL(redirect || "").pathname;
-    return path === "/family-account.html" || path === "/contact-update.html" || path === "/family-account";
-  } catch { return false; }
+    const url = new URL(value, "https://www.pack3963.com");
+    const host = url.hostname.toLowerCase();
+    if (host !== "pack3963.com" && host !== "www.pack3963.com" && !host.endsWith(".pack3963.pages.dev")) return "";
+    return url.pathname.replace(/\/$/, "") || "/";
+  } catch { return ""; }
+}
+function isFamilyRedirect(redirect) {
+  const path = redirectPath(redirect);
+  return path === "/family-account.html" || path === "/contact-update.html" || path === "/family-account";
+}
+function portalDestination(redirect) {
+  const path = redirectPath(redirect);
+  if (path === "/family-account" || path === "/family-account.html" || path === "/contact-update.html") return "/family-account.html";
+  if (path === "/treasurer" || path === "/treasurer.html") return "/treasurer.html";
+  return "";
+}
+function signInUrl(base, hash, type, redirect) {
+  const destination = portalDestination(redirect);
+  if (destination && (type === "signup" || type === "magiclink")) {
+    const url = new URL("/auth/confirm/", "https://www.pack3963.com");
+    url.searchParams.set("token_hash", hash);
+    url.searchParams.set("type", type);
+    url.searchParams.set("next", destination);
+    return url.toString();
+  }
+  return verifyUrl(base, hash, type, redirect);
 }
 function verifyUrl(base, hash, type, redirect) {
   const url = new URL("/auth/v1/verify", base);
@@ -719,12 +750,13 @@ function esc(value) {
 }
 function htmlEmail(copy, link, expiry, ttl, support) {
   const u = esc(link), e = esc(expiry), s = esc(support);
+  const portalLabel = copy[1] === "FAMILY ACCOUNT" ? "Family Account Portal" : "Treasurer Portal";
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${esc(copy[0])}</title></head>
 <body style="margin:0;background:#eef3f8;color:#243447;font-family:Arial,Helvetica,sans-serif;">
 <div style="display:none;max-height:0;overflow:hidden;">${esc(copy[2])} — valid for ${ttl} minutes.</div>
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef3f8;padding:24px 12px;"><tr><td align="center">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:600px;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 6px 24px rgba(0,46,93,.12);">
-<tr><td align="center" style="background:#004b8d;padding:22px 32px;border-bottom:8px solid #f7c600;"><img src="https://www.pack3963.com/assets/images/cubscoutlogo.png" width="170" alt="Cub Scout Pack 3963" style="display:block;width:170px;max-width:100%;height:auto;border:0;margin:0 auto 10px;"><div style="color:#d9ecff;font-size:14px;font-weight:700;">Treasurer Portal</div></td></tr>
+<tr><td align="center" style="background:#004b8d;padding:22px 32px;border-bottom:8px solid #f7c600;"><img src="https://www.pack3963.com/assets/images/cubscoutlogo.png" width="170" alt="Cub Scout Pack 3963" style="display:block;width:170px;max-width:100%;height:auto;border:0;margin:0 auto 10px;"><div style="color:#d9ecff;font-size:14px;font-weight:700;">${portalLabel}</div></td></tr>
 <tr><td style="padding:34px 32px 18px;"><div style="color:#d71920;font-size:12px;font-weight:800;letter-spacing:1.2px;">${esc(copy[1])}</div>
 <h1 style="color:#004b8d;font-size:28px;line-height:1.25;margin:10px 0 14px;">${esc(copy[2])}</h1><p style="font-size:16px;line-height:1.6;margin:0 0 24px;">${esc(copy[3])}</p>
 <table role="presentation" cellspacing="0" cellpadding="0"><tr><td style="background:#f7c600;border-radius:8px;"><a href="${u}" style="display:inline-block;color:#003f75;font-weight:800;font-size:16px;text-decoration:none;padding:15px 22px;">${esc(copy[4])}</a></td></tr></table>
@@ -734,5 +766,5 @@ function htmlEmail(copy, link, expiry, ttl, support) {
 <tr><td style="background:#003f75;color:#d9ecff;padding:18px 32px;font-size:12px;">Cub Scout Pack 3963 · Chicago, Illinois</td></tr></table></td></tr></table></body></html>`;
 }
 function textEmail(copy, link, expiry, ttl, support) {
-  return [copy[1] === "PARENT PORTAL" ? "CUB SCOUTS PACK 3963 — PARENT PORTAL" : "CUB SCOUT PACK 3963 — TREASURER PORTAL", "", copy[2], "", copy[3], "", copy[4] + ":", link, "", "This link expires at " + expiry + " (" + ttl + " minutes after this email was sent).", "", "If you did not request this email, you can safely ignore it.", "Questions? Contact " + support].join("\\n");
+  return [copy[1] === "FAMILY ACCOUNT" ? "CUB SCOUT PACK 3963 — FAMILY ACCOUNT" : "CUB SCOUT PACK 3963 — TREASURER PORTAL", "", copy[2], "", copy[3], "", copy[4] + ":", link, "", "This link expires at " + expiry + " (" + ttl + " minutes after this email was sent).", "", "If you did not request this email, you can safely ignore it.", "Questions? Contact " + support].join("\\n");
 }
