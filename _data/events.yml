@@ -130,6 +130,8 @@ events:
     description: >-
       Pack 3963 will welcome Pack 3957 for the Raingutter Regatta in Eden Church's fellowship hall.
       The morning will also include a brief awards and Bobcat ceremony followed by a potluck lunch.
+    signup_label: Sign up for the potluck
+    signup_url: https://docs.google.com/forms/d/e/1FAIpQLSeRpqBdjU5tJVXp8rudjiJ92tA2ag4plpUepXUkpeCVQ2Elnw/viewform?usp=header
   - id: tentative-november-activity-2026
     date: "2026-11-07"
     date_label: Saturday, November 7
