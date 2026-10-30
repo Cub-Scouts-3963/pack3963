@@ -49,57 +49,72 @@ scripts:
            UPCOMING EVENTS
            ============================ -->
       <h2>{{ site.data.events.season }} Events</h2>
+      <p class="event-calendar-help">Select a month to view its events. The current month opens automatically.</p>
 
       {% assign upcoming_events = site.data.events.events | sort: "date" %}
+      {% assign event_months = upcoming_events | group_by_exp: "event", "event.date | date: '%B %Y'" %}
       <p id="no-upcoming-events" class="callout-box" hidden>
         No upcoming events are currently posted. Please check back soon.
       </p>
-      {% for event in upcoming_events %}
-      <article
-        class="callout-box event-card pack-event-card"
-        data-event-end="{{ event.end_date | default: event.date }}"
-        data-event-kind="{{ event.kind | default: 'event' }}"
-        data-event-group="pack"
-      >
-        <h3>
-          {% if event.kind == "deadline" %}<span class="event-kind-badge">Deadline</span>{% endif %}
-          {{ event.date_label }} – {{ event.title }}
-        </h3>
-        <p><strong>Time:</strong> {{ event.time }}</p>
-        <p>
-          <strong>Location:</strong>
-          {% if event.location == "meeting" %}
-            {% if event.location_url %}
-              <a href="{{ event.location_url }}" target="_blank" rel="noopener noreferrer">{{ site.data.pack.meeting.venue }}</a>
-            {% else %}
-              {{ site.data.pack.meeting.venue }}
-            {% endif %}
-          {% else %}
-            {% if event.location_url %}
-              <a href="{{ event.location_url }}" target="_blank" rel="noopener noreferrer">{{ event.location }}</a>
-            {% else %}
-              {{ event.location }}
-            {% endif %}
-          {% endif %}
-        </p>
-        <p>{{ event.description }}</p>
-        {% if event.checklist %}
-        <h4>What to bring</h4>
-        <ul class="feature-list">
-          {% for item in event.checklist %}
-          <li>{{ item }}</li>
-          {% endfor %}
-        </ul>
-        {% endif %}
-        {% if event.signup_url %}
-        <p>
-          <a class="btn-blue" href="{{ event.signup_url }}" target="_blank" rel="noopener noreferrer">
-            {{ event.signup_label | default: "Sign up" }}
-          </a>
-        </p>
-        {% endif %}
-      </article>
-      {% endfor %}
+
+      <div class="event-month-list">
+        {% for month in event_months %}
+        <details class="event-month">
+          <summary>
+            <span>{{ month.name }}</span>
+            <span class="event-month__count" data-month-count>{{ month.items | size }} events</span>
+          </summary>
+          <div class="event-month__content">
+            {% for event in month.items %}
+            <article
+              class="callout-box event-card pack-event-card"
+              data-event-end="{{ event.end_date | default: event.date }}"
+              data-event-kind="{{ event.kind | default: 'event' }}"
+              data-event-group="pack"
+            >
+              <h3>
+                {% if event.kind == "deadline" %}<span class="event-kind-badge">Deadline</span>{% endif %}
+                {{ event.date_label }} – {{ event.title }}
+              </h3>
+              <p><strong>Time:</strong> {{ event.time }}</p>
+              <p>
+                <strong>Location:</strong>
+                {% if event.location == "meeting" %}
+                  {% if event.location_url %}
+                    <a href="{{ event.location_url }}" target="_blank" rel="noopener noreferrer">{{ site.data.pack.meeting.venue }}</a>
+                  {% else %}
+                    {{ site.data.pack.meeting.venue }}
+                  {% endif %}
+                {% else %}
+                  {% if event.location_url %}
+                    <a href="{{ event.location_url }}" target="_blank" rel="noopener noreferrer">{{ event.location }}</a>
+                  {% else %}
+                    {{ event.location }}
+                  {% endif %}
+                {% endif %}
+              </p>
+              <p>{{ event.description }}</p>
+              {% if event.checklist %}
+              <h4>What to bring</h4>
+              <ul class="feature-list">
+                {% for item in event.checklist %}
+                <li>{{ item }}</li>
+                {% endfor %}
+              </ul>
+              {% endif %}
+              {% if event.signup_url %}
+              <p>
+                <a class="btn-blue" href="{{ event.signup_url }}" target="_blank" rel="noopener noreferrer">
+                  {{ event.signup_label | default: "Sign up" }}
+                </a>
+              </p>
+              {% endif %}
+            </article>
+            {% endfor %}
+          </div>
+        </details>
+        {% endfor %}
+      </div>
 
       <!-- ============================
            YEAR-ROUND ACTIVITIES

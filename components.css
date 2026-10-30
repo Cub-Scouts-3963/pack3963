@@ -410,7 +410,7 @@
 
 .popcorn-timeline {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 18px;
   margin-top: 18px;
 }
@@ -464,5 +464,106 @@
 
   .prize-form-embed {
     height: 620px;
+  }
+}
+
+
+/* =========================================
+   MONTHLY EVENT CALENDAR
+   ========================================= */
+.event-calendar-help {
+  margin: -4px 0 22px;
+  color: #5a6778;
+}
+
+.event-month-list {
+  display: grid;
+  gap: 16px;
+  margin: 22px 0 42px;
+}
+
+.event-month {
+  overflow: hidden;
+  background: var(--white);
+  border: 1px solid #cbd6e2;
+  border-radius: 10px;
+  box-shadow: 0 5px 16px rgba(0, 63, 135, 0.07);
+}
+
+.event-month[hidden] {
+  display: none;
+}
+
+.event-month summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 16px;
+  align-items: center;
+  padding: 18px 22px;
+  color: var(--white);
+  background: var(--blue);
+  font-size: 1.2rem;
+  font-weight: 800;
+  cursor: pointer;
+  list-style: none;
+}
+
+.event-month summary::-webkit-details-marker {
+  display: none;
+}
+
+.event-month summary::after {
+  content: "+";
+  width: 28px;
+  color: var(--gold);
+  font-size: 1.7rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.event-month[open] summary::after {
+  content: "−";
+}
+
+.event-month summary:hover,
+.event-month summary:focus-visible {
+  background: #002f66;
+}
+
+.event-month summary:focus-visible {
+  outline: 3px solid var(--gold);
+  outline-offset: -3px;
+}
+
+.event-month__count {
+  padding: 4px 10px;
+  color: var(--blue);
+  background: var(--gold);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.event-month__content {
+  padding: 20px 22px 2px;
+}
+
+.event-month__content .event-card:first-child {
+  margin-top: 0;
+}
+
+@media (max-width: 600px) {
+  .event-month summary {
+    gap: 10px;
+    padding: 15px 16px;
+    font-size: 1.05rem;
+  }
+
+  .event-month__count {
+    font-size: 0.7rem;
+  }
+
+  .event-month__content {
+    padding: 14px 14px 1px;
   }
 }
