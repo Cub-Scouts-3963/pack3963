@@ -1,0 +1,24 @@
+---
+layout: default
+title: Secure Sign-in | Cub Scout Pack 3963
+description: Securely complete a Pack 3963 portal sign-in.
+robots: noindex, nofollow
+permalink: /auth/confirm/
+styles:
+- /family-account.css
+---
+
+<main class="family-shell">
+  <section class="family-card family-loading" aria-live="polite">
+    <span class="family-spinner" id="auth-confirm-spinner" aria-hidden="true"></span>
+    <div>
+      <p class="family-eyebrow">Secure Pack 3963 sign-in</p>
+      <h1 id="auth-confirm-heading">Opening your account</h1>
+      <p id="auth-confirm-status">We’re securely verifying your one-time link.</p>
+      <a class="btn-blue" id="auth-confirm-return" href="/family-account.html" hidden>Request a new sign-in link</a>
+    </div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.118.0/dist/umd/supabase.min.js"></script>
+<script src="{{ '/assets/js/auth-confirm.js' | relative_url }}?v={{ site.asset_version }}"></script>

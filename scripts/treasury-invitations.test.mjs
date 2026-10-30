@@ -154,7 +154,29 @@ test("existing signed sign-in emails still reach the provider", async t => {
   const response = await worker.fetch(new Request("https://worker.example/hooks/supabase/send-email", {method:"POST",body:raw,headers:{"webhook-id":"hook-id","webhook-timestamp":timestamp,"webhook-signature":"v1,"+signature}}), {...env,SUPABASE_AUTH_HOOK_SECRET:"v1,whsec_"+secret});
   assert.equal(response.status, 200);
   assert.match(sent.subject, /one-time Pack 3963 sign-in link/);
-  assert.match(sent.html, /token=test-token/);
+  assert.match(sent.html, /https:\/\/www\.pack3963\.com\/auth\/confirm\//);
+  assert.doesNotMatch(sent.html + sent.text, /project\.supabase\.co\/auth\/v1\/verify/);
+});
+
+test("family sign-in has separate wording and a Pack 3963 URL", async t => {
+  let sent;
+  t.mock.method(globalThis, "fetch", async (url, init) => {
+    assert.equal(url, "https://api.resend.com/emails"); sent = JSON.parse(init.body);
+    return Response.json({ id: "family-auth-email-id" });
+  });
+  const raw = JSON.stringify({ user: { email: "parent@example.org" }, email_data: { email_action_type: "magiclink", token_hash: "family-token", redirect_to: "https%3A%2F%2Fwww.pack3963.com%2Ffamily-account.html" } });
+  const secret = btoa("a-test-secret-with-enough-bytes");
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const key = await crypto.subtle.importKey("raw", Uint8Array.from(atob(secret), c => c.charCodeAt(0)), {name:"HMAC",hash:"SHA-256"}, false, ["sign"]);
+  const signature = btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode("family-hook." + timestamp + "." + raw)))));
+  const response = await worker.fetch(new Request("https://worker.example/hooks/supabase/send-email", {method:"POST",body:raw,headers:{"webhook-id":"family-hook","webhook-timestamp":timestamp,"webhook-signature":"v1,"+signature}}), {...env,SUPABASE_AUTH_HOOK_SECRET:"v1,whsec_"+secret});
+  assert.equal(response.status, 200);
+  assert.equal(sent.subject, "Your secure Pack 3963 Family Account sign-in link");
+  assert.match(sent.html, /Family Account Portal/);
+  assert.match(sent.html, /Open my Family Account/);
+  assert.match(sent.text, /CUB SCOUT PACK 3963 — FAMILY ACCOUNT/);
+  assert.match(sent.html + sent.text, /https:\/\/www\.pack3963\.com\/auth\/confirm\//);
+  assert.doesNotMatch(sent.html + sent.text, /Treasurer Portal|supabase\.co\/auth\/v1\/verify/);
 });
 
 function portalHarness(sendResponse, upsertError = null) {
