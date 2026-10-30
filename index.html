@@ -3,133 +3,137 @@ layout: default
 title: Cub Scout Pack 3963 | Chicago, IL – Jefferson Park & Portage Park Scouting
 description: Cub Scout Pack 3963 serves families in Jefferson Park, Portage Park, and the Northwest Side of Chicago. Learn about our dens, events, leadership, and how to join our youth scouting program for boys and girls in grades K–5.
 keywords: Cub Scouts Chicago, Pack 3963, Jefferson Park Scouts, Portage Park Scouts, Chicago youth programs, Cub Scout Pack, Scouting Chicago, kids activities Chicago, Northwest Side Chicago Scouts
+styles:
+- /home.css
 scripts:
 - /assets/js/home-events.js
 ---
 
-<!-- Hero Header -->
-  <header class="hero-header">
-    <div class="hero-image-wrapper">
-      <img
-        src="assets/images/troopheader.png"
-        alt="Cub Scout Pack 3963 – Chicago, IL"
-        class="hero-image"
-      />
-    </div>
-  </header>
+<header class="hero-header">
+  <div class="hero-image-wrapper">
+    <img
+      src="assets/images/troopheader.png"
+      alt="Cub Scout Pack 3963 – Chicago, IL"
+      class="hero-image"
+    />
+  </div>
+</header>
 
-  <!-- Main Content -->
-  <main class="section">
-    <div class="section-inner two-column">
-
-      <!-- Left Column -->
-      <div class="column">
-        <h1>Welcome to Cub Scout Pack 3963</h1>
-
-        <p>
+<main class="section home-page">
+  <div class="section-inner home-layout">
+    <section class="home-intro" aria-labelledby="home-title">
+      <div class="home-intro-copy">
+        <p class="page-kicker">Adventure, friendship, and service</p>
+        <h1 id="home-title">Welcome to Cub Scout Pack 3963</h1>
+        <p class="home-lede">
           Cub Scout Pack 3963 is a family-focused, adventure-driven Pack serving the Northwest Side of Chicago.
           We welcome children from kindergarten through fifth grade, offering:
         </p>
 
-        <ul class="feature-list">
+        <ul class="feature-list home-feature-list">
           <li>Outdoor adventures and camping</li>
           <li>Hands-on learning and STEM activities</li>
           <li>Community service projects</li>
           <li>Leadership development and teamwork</li>
         </ul>
-
-        <section
-          class="callout-box"
-          id="next-event"
-          data-meeting-venue="{{ site.data.pack.meeting.venue | escape }}"
-          data-meeting-address="{{ site.data.pack.meeting.street | append: ', ' | append: site.data.pack.meeting.city_state_zip | escape }}"
-          hidden
-        >
-          <h2>📅 Next Event: <span id="next-event-title"></span></h2>
-          <p><strong>Date:</strong> <span id="next-event-date"></span></p>
-          <p><strong>Time:</strong> <span id="next-event-time"></span></p>
-          <p><strong>Location:</strong> <span id="next-event-location"></span></p>
-          <p id="next-event-description"></p>
-          <p><a href="events.html">View all upcoming events</a></p>
-        </section>
-
-        <script type="application/json" id="events-data">{{ site.data.events.events | jsonify }}</script>
-
-        <section class="callout-box home-family-account">
-          <p class="page-kicker">For current Pack families</p>
-          <h2>Check Your Family Account</h2>
-          <p>Securely review your family balance, Scout-related charges, payments, and official Pack invoices.</p>
-          <a href="{{ '/family-account.html' | relative_url }}" class="btn-blue">Open family account</a>
-        </section>
-
-        <section class="callout-box home-fundraising">
-          <p class="page-kicker">Pack Fundraiser</p>
-          <h2>Popcorn Powers Our Adventures</h2>
-          <p>
-            Popcorn sales help fund activities, advancement materials, recognition, and supplies
-            while Scouts build confidence, responsibility, and communication skills.
-          </p>
-          <a href="{{ '/popcorn.html' | relative_url }}" class="btn-blue">View popcorn sales information</a>
-        </section>
-
-        <!-- ============================
-             NEW SCOUT FLYER SECTION
-             ============================ -->
-        <div class="callout-box callout-flyer">
-          <h2>New Scout Welcome Flyer</h2>
-          <p>
-            Our official Pack 3963 flyer gives families a quick overview of Cub Scout ranks, activities,
-            and what to expect throughout the year. You can view it right here or download a copy to share.
-          </p>
-
-          <!-- Embedded Flyer Image -->
-          <div class="flyer-image-wrapper">
-            <img
-              src="assets/images/flyer.png"
-              alt="Pack 3963 Cub Scout Welcome Flyer"
-              class="flyer-image"
-            >
-          </div>
-
-          <!-- Download Button -->
-          <a href="assets/docs/flyer.pdf" class="btn-blue" target="_blank" rel="noopener noreferrer">
-            Download Flyer (PDF)
-          </a>
-        </div>
-
-        <a href="{{ site.data.pack.registration_url }}"
-   class="btn-blue" target="_blank" rel="noopener noreferrer">
-  Register for Cub Scouts (Youth or Adult)
-</a>
-        <p>
-          Our Pack meets monthly during the school year, with den meetings scheduled by each den leader.
-          We serve families from across the Portage Park, Jefferson Park, and surrounding neighborhoods.
-        </p>
-
-        <p>
-          Pack 3963 meets at <strong>{{ site.data.pack.meeting.venue }}</strong>, located at
-          <strong>{{ site.data.pack.meeting.street }}, {{ site.data.pack.meeting.city_state_zip }}</strong>.
-        </p>
-
-        <p>
-          Want to learn more about joining Cub Scouts? Visit our
-          <a href="contact.html">Contact Page</a> to get in touch.
-        </p>
-
-        <p class="contact-info">
-          <strong>Email:</strong> {{ site.data.pack.email }}<br>
-          <strong>Phone:</strong> {{ site.data.pack.phone }}
-        </p>
       </div>
 
-      <!-- Right Column: Logo -->
-      <div class="column column-image">
+      <div class="home-logo-panel" aria-hidden="true">
         <img
           src="assets/images/cubscoutlogo.png"
-          alt="Cub Scout Logo"
+          alt=""
           class="cub-logo"
         />
       </div>
+    </section>
 
-    </div>
-  </main>
+    <section
+      class="callout-box home-card home-next-event"
+      id="next-event"
+      data-meeting-venue="{{ site.data.pack.meeting.venue | escape }}"
+      data-meeting-address="{{ site.data.pack.meeting.street | append: ', ' | append: site.data.pack.meeting.city_state_zip | escape }}"
+      hidden
+    >
+      <p class="page-kicker">Coming up</p>
+      <h2>📅 Next Event: <span id="next-event-title"></span></h2>
+      <p><strong>Date:</strong> <span id="next-event-date"></span></p>
+      <p><strong>Time:</strong> <span id="next-event-time"></span></p>
+      <p><strong>Location:</strong> <span id="next-event-location"></span></p>
+      <p id="next-event-description"></p>
+      <p class="home-card-action"><a href="events.html" class="btn-secondary">View all upcoming events</a></p>
+    </section>
+
+    <script type="application/json" id="events-data">{{ site.data.events.events | jsonify }}</script>
+
+    <section class="callout-box home-card home-family-account">
+      <p class="page-kicker">For current Pack families</p>
+      <h2>Check Your Family Account</h2>
+      <p>Securely review your family balance, Scout-related charges, payments, and official Pack invoices.</p>
+      <p class="home-card-action">
+        <a href="{{ '/family-account.html' | relative_url }}" class="btn-blue">Open family account</a>
+      </p>
+    </section>
+
+    <section class="callout-box home-card home-fundraising">
+      <p class="page-kicker">Pack fundraiser</p>
+      <h2>Popcorn Powers Our Adventures</h2>
+      <p>
+        Popcorn sales help fund activities, advancement materials, recognition, and supplies
+        while Scouts build confidence, responsibility, and communication skills.
+      </p>
+      <p class="home-card-action">
+        <a href="{{ '/popcorn.html' | relative_url }}" class="btn-blue">View popcorn sales information</a>
+      </p>
+    </section>
+
+    <section class="callout-box home-flyer">
+      <div class="home-flyer-copy">
+        <p class="page-kicker">Share Pack 3963</p>
+        <h2>New Scout Welcome Flyer</h2>
+        <p>
+          Our official Pack 3963 flyer gives families a quick overview of Cub Scout ranks, activities,
+          and what to expect throughout the year. View it here or download a copy to share.
+        </p>
+        <a href="assets/docs/flyer.pdf" class="btn-blue" target="_blank" rel="noopener noreferrer">
+          Download Flyer (PDF)
+        </a>
+      </div>
+
+      <div class="flyer-image-wrapper home-flyer-preview">
+        <img
+          src="assets/images/flyer.png"
+          alt="Pack 3963 Cub Scout Welcome Flyer"
+          class="flyer-image"
+        />
+      </div>
+    </section>
+
+    <section class="home-join-panel" aria-labelledby="home-join-title">
+      <p class="page-kicker">Ready for an adventure?</p>
+      <h2 id="home-join-title">Join Pack 3963</h2>
+      <p>
+        Our Pack meets monthly during the school year, with den meetings scheduled by each den leader.
+        We serve families from across Portage Park, Jefferson Park, and surrounding neighborhoods.
+      </p>
+      <p>
+        Pack 3963 meets at <strong>{{ site.data.pack.meeting.venue }}</strong>, located at
+        <strong>{{ site.data.pack.meeting.street }}, {{ site.data.pack.meeting.city_state_zip }}</strong>.
+      </p>
+      <p>
+        Want to learn more first? Visit our <a href="contact.html">Contact Page</a> to get in touch.
+      </p>
+      <p class="contact-info">
+        <strong>Email:</strong> {{ site.data.pack.email }}<br />
+        <strong>Phone:</strong> {{ site.data.pack.phone }}
+      </p>
+      <a
+        href="{{ site.data.pack.registration_url }}"
+        class="btn-gold home-register-button"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Register for Cub Scouts (Youth or Adult)
+      </a>
+    </section>
+  </div>
+</main>
