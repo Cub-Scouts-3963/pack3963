@@ -23,6 +23,26 @@ if (eventCards.length) {
     }
   });
 
+  let firstVisibleMonthOpened = false;
+
+  document.querySelectorAll('.event-month').forEach((monthGroup) => {
+    const visibleMonthEvents = Array.from(monthGroup.querySelectorAll('.event-card'))
+      .filter((eventCard) => !eventCard.hidden);
+    const countLabel = monthGroup.querySelector('[data-month-count]');
+
+    monthGroup.hidden = visibleMonthEvents.length === 0;
+    monthGroup.open = !monthGroup.hidden && !firstVisibleMonthOpened;
+
+    if (monthGroup.open) {
+      firstVisibleMonthOpened = true;
+    }
+
+    if (countLabel) {
+      const count = visibleMonthEvents.length;
+      countLabel.textContent = `${count} ${count === 1 ? 'event' : 'events'}`;
+    }
+  });
+
   if (noUpcomingEvents) {
     noUpcomingEvents.hidden = visibleCounts.pack > 0;
   }
