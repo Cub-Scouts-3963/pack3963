@@ -34,40 +34,56 @@ scripts:
     </nav>
 
     <h2>Upcoming Community Events</h2>
+    <p class="event-calendar-help">Select a month to view its events. The current month opens automatically.</p>
+
     {% assign community_events = site.data.community_events.events | sort: "date" %}
+    {% assign community_event_months = community_events | group_by_exp: "event", "event.date | date: '%B %Y'" %}
     <p id="no-community-events" class="callout-box" hidden>
       No upcoming Eden UCC community events are currently posted. Please check back soon.
     </p>
-    {% for event in community_events %}
-    <article
-      class="callout-box event-card community-event-card"
-      data-event-end="{{ event.end_date | default: event.date }}"
-      data-event-group="community"
-    >
-      <h3><span class="community-event-badge">Eden UCC</span>{{ event.date_label }} – {{ event.title }}</h3>
-      <p><strong>Time:</strong> {{ event.time }}</p>
-      <p><strong>Location:</strong> {{ event.location }}</p>
-      <p><strong>Organized by:</strong> {{ event.organizer }}</p>
-      <p>{{ event.description }}</p>
-      <div class="event-actions">
-        {% if event.signup_url %}
-        <a class="btn-blue" href="{{ event.signup_url }}" target="_blank" rel="noopener noreferrer">
-          {{ event.signup_label | default: "Learn more" }}
-        </a>
-        {% endif %}
-        {% if event.payment_url %}
-        <a class="btn-secondary" href="{{ event.payment_url }}" target="_blank" rel="noopener noreferrer">
-          {{ event.payment_label | default: "Pay online" }}
-        </a>
-        {% endif %}
-        {% if event.contact_url %}
-        <a class="btn-secondary" href="{{ event.contact_url }}">
-          {{ event.contact_label | default: "Contact organizer" }}
-        </a>
-        {% endif %}
-      </div>
-    </article>
-    {% endfor %}
+
+    <div class="event-month-list">
+      {% for month in community_event_months %}
+      <details class="event-month">
+        <summary>
+          <span>{{ month.name }}</span>
+          <span class="event-month__count" data-month-count>{{ month.items | size }} events</span>
+        </summary>
+        <div class="event-month__content">
+          {% for event in month.items %}
+          <article
+            class="callout-box event-card community-event-card"
+            data-event-end="{{ event.end_date | default: event.date }}"
+            data-event-group="community"
+          >
+            <h3><span class="community-event-badge">Eden UCC</span>{{ event.date_label }} – {{ event.title }}</h3>
+            <p><strong>Time:</strong> {{ event.time }}</p>
+            <p><strong>Location:</strong> {{ event.location }}</p>
+            <p><strong>Organized by:</strong> {{ event.organizer }}</p>
+            <p>{{ event.description }}</p>
+            <div class="event-actions">
+              {% if event.signup_url %}
+              <a class="btn-blue" href="{{ event.signup_url }}" target="_blank" rel="noopener noreferrer">
+                {{ event.signup_label | default: "Learn more" }}
+              </a>
+              {% endif %}
+              {% if event.payment_url %}
+              <a class="btn-secondary" href="{{ event.payment_url }}" target="_blank" rel="noopener noreferrer">
+                {{ event.payment_label | default: "Pay online" }}
+              </a>
+              {% endif %}
+              {% if event.contact_url %}
+              <a class="btn-secondary" href="{{ event.contact_url }}">
+                {{ event.contact_label | default: "Contact organizer" }}
+              </a>
+              {% endif %}
+            </div>
+          </article>
+          {% endfor %}
+        </div>
+      </details>
+      {% endfor %}
+    </div>
 
     <h2>Flyers and Forms</h2>
     <div class="community-resource-grid" aria-label="Eden UCC event flyers and forms">
