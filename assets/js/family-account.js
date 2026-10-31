@@ -10,7 +10,10 @@
 
   async function authenticatedFetch(input, init = {}) {
     const headers = new Headers(init.headers || {});
-    if (currentAccessToken) headers.set("Authorization", `Bearer ${currentAccessToken}`);
+    const requestUrl = typeof input === "string" ? input : String(input?.url || input);
+    if (currentAccessToken && requestUrl.startsWith(SUPABASE_URL) && !requestUrl.includes("/auth/v1/")) {
+      headers.set("Authorization", `Bearer ${currentAccessToken}`);
+    }
     return window.fetch(input, { ...init, headers });
   }
 
