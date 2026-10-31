@@ -11,6 +11,14 @@
   const AUTH_STORAGE_KEY = "pack3963-treasurer-session";
   const LEGACY_AUTH_STORAGE_KEY = "sb-buvrqioskjjhszqkpypa-auth-token";
   try { window.localStorage.removeItem(LEGACY_AUTH_STORAGE_KEY); } catch (_) { /* Storage may be unavailable. */ }
+  let currentAccessToken = "";
+
+  async function authenticatedFetch(input, init = {}) {
+    const headers = new Headers(init.headers || {});
+    if (currentAccessToken) headers.set("Authorization", `Bearer ${currentAccessToken}`);
+    return window.fetch(input, { ...init, headers });
+  }
+
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: {
       persistSession: true,
@@ -18,7 +26,8 @@
       storageKey: AUTH_STORAGE_KEY,
       detectSessionInUrl: true,
       autoRefreshToken: true
-    }
+    },
+    global: { fetch: authenticatedFetch }
   });
   const state = { user: null, access: null, accounts: [], entries: [], expenses: [], receipts: [], summary: null, users: [], audit: [], householdContacts: [], importRows: [], rosterRows: [], rosterHouseholds: [], rosterFileName: "", activeLedgerId: null, driveReviewStarted: false };
   const $ = (selector) => document.querySelector(selector);
@@ -44,6 +53,7 @@
 
   async function signOut() {
     await client.auth.signOut({ scope: "local" });
+    currentAccessToken = "";
     window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
     state.user = null; state.access = null;
     $("#treasurer-app").hidden = true;
@@ -54,6 +64,7 @@
 
   async function authorize(session) {
     if (!session?.user) return signOut();
+    currentAccessToken = session.access_token || "";
     state.user = session.user;
     $("#auth-panel").hidden = true;
     status("Checking access…");
@@ -1170,9 +1181,6 @@
   }
 
   document.addEventListener("DOMContentLoaded", async () => {
-    window.addEventListener("pagehide", () => {
-      window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
-    });
     window.addEventListener("treasury-imported", loadAll);
     setDefaults();
     $("#login-form").addEventListener("submit", async event => {
@@ -1335,6 +1343,9 @@
     });
     const { data } = await client.auth.getSession();
     if (data.session) await authorize(data.session);
-    client.auth.onAuthStateChange((event, session) => { if (event === "SIGNED_IN" && session && state.user?.id !== session.user.id) setTimeout(() => authorize(session), 0); });
+    client.auth.onAuthStateChange((event, session) => {
+      currentAccessToken = session?.access_token || "";
+      if (event === "SIGNED_IN" && session && state.user?.id !== session.user.id) setTimeout(() => authorize(session), 0);
+    });
   });
 })();
