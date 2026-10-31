@@ -6,6 +6,14 @@
   const AUTH_STORAGE_KEY = "pack3963-family-account-session";
   const LEGACY_AUTH_STORAGE_KEY = "sb-buvrqioskjjhszqkpypa-auth-token";
   try { window.localStorage.removeItem(LEGACY_AUTH_STORAGE_KEY); } catch (_) { /* Storage may be unavailable. */ }
+  let currentAccessToken = "";
+
+  async function authenticatedFetch(input, init = {}) {
+    const headers = new Headers(init.headers || {});
+    if (currentAccessToken) headers.set("Authorization", `Bearer ${currentAccessToken}`);
+    return window.fetch(input, { ...init, headers });
+  }
+
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
     auth: {
       persistSession: true,
@@ -13,7 +21,8 @@
       storageKey: AUTH_STORAGE_KEY,
       detectSessionInUrl: true,
       autoRefreshToken: true
-    }
+    },
+    global: { fetch: authenticatedFetch }
   });
   const state = { portal: null, householdIndex: 0, session: null };
   const $ = selector => document.querySelector(selector);
@@ -136,6 +145,7 @@
   }
 
   async function loadPortal() {
+    currentAccessToken = state.session?.access_token || "";
     show("loading");
     const { data, error } = await client.rpc("get_family_account_portal");
     if (error) throw error;
@@ -145,6 +155,7 @@
 
   async function signOut() {
     await client.auth.signOut({ scope: "local" });
+    currentAccessToken = "";
     window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
     state.portal = null;
     state.session = null;
@@ -190,16 +201,14 @@
 
   client.auth.onAuthStateChange((event, session) => {
     state.session = session;
+    currentAccessToken = session?.access_token || "";
     if (event === "SIGNED_OUT") show("auth");
-  });
-
-  window.addEventListener("pagehide", () => {
-    window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
   });
 
   client.auth.getSession().then(({ data, error }) => {
     if (error) throw error;
     state.session = data.session;
+    currentAccessToken = state.session?.access_token || "";
     if (state.session) return loadPortal();
     show("auth");
   }).catch(handleError);
