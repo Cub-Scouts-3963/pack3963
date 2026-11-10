@@ -167,6 +167,19 @@ events:
     location: To be confirmed
     description: >-
       Regular den meetings. Watch for location and activity details from Pack leadership.
+  - id: december-parent-meeting-2026
+    date: "2026-12-07"
+    date_label: Monday, December 7
+    title: Pack 3963 Parents Meeting
+    time: 6:00–7:00 PM
+    location: Venue to be confirmed (previously 6038 W Irving Park Rd, Chicago)
+    description: >-
+      Monthly Pack parent meeting. Follow up on treasury reconciliation, popcorn fundraising,
+      co-ed Pack approval, charter renewal, loaner camping equipment, safety planning, and
+      upcoming winter and spring activities. December 7 was agreed at the November meeting;
+      the time follows the usual meeting schedule, and the location still needs confirmation.
+    signup_label: View meeting on Pack Google Calendar
+    signup_url: https://www.google.com/calendar/event?eid=N245Z2lvZTJkZ2FiczFpOXJtNTAybDJ2cm8gY3Vic2NvdXRzMzk2M0Bt
   - id: december-offsite-den-meetings-2026
     date: "2026-12-12"
     date_label: Saturday, December 12
