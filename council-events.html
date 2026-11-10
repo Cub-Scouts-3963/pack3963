@@ -17,7 +17,19 @@ scripts:
     <h1>Pathway to Adventure Council Events</h1>
     <p>Browse upcoming events sponsored by the Pathway to Adventure Council. These events are provided by the council and are separate from Pack 3963 activities.</p>
     <p><a class="btn-secondary" href="https://scoutingevent.com/456" target="_blank" rel="noopener noreferrer">View the full council calendar</a></p>
-    <div id="council-events-status" class="callout-box" role="status">Loading council events…</div>
+    <div class="council-event-controls" aria-label="Filter council events">
+      <label>
+        Search events
+        <input id="council-events-search" type="search" placeholder="Search by title, location, or topic">
+      </label>
+      <label>
+        Month
+        <select id="council-events-month">
+          <option value="">All upcoming months</option>
+        </select>
+      </label>
+    </div>
+    <div id="council-events-status" class="callout-box" role="status">Loading upcoming council events…</div>
     <div id="council-events-list" class="council-events-list" aria-live="polite"></div>
   </div>
 </main>
