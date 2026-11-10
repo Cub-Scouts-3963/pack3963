@@ -73,15 +73,15 @@ events:
       Regular den meetings will include preparation for the Pack's November Raingutter Regatta.
   - id: popcorn-order-forms-due-2026
     kind: deadline
-    date: "2026-10-24"
-    date_label: Saturday, October 24
-    title: Popcorn Order Forms Due
+    date: "2026-11-20"
+    date_label: Friday, November 20
+    title: Online Popcorn Sales End
     time: Submit by end of day
-    location: Submit to Pack leadership
-    announcement: Popcorn order forms are due Saturday, October 24.
+    location: Online
+    announcement: Popcorn sales end Friday, November 20 — make one more push!
     description: >-
-      Return completed popcorn order forms to Pack leadership. Online sales continue through
-      Friday, November 20, but the online store has a slightly different product selection.
+      Online popcorn sales continue through Friday, November 20. Share the Scout's personal store
+      link with family and friends and help the Pack finish strong.
     signup_label: View popcorn sales details
     signup_url: /popcorn.html
   - id: ptac-pushmobile-race-2026
@@ -121,6 +121,8 @@ events:
       Pack families will volunteer during the Forest Preserves' official stewardship work day.
       A group waiver has been submitted, and each participant will complete an individual waiver
       on-site. Additional activity details will be shared closer to the date.
+    signup_label: Sign up for the November service weekend
+    signup_url: https://docs.google.com/forms/d/e/1FAIpQLSf8izqqMiG6d6Yrsn1qlCQ-Mmm2HcJMK9DA8carPbTgMM1L6A/viewform
   - id: raingutter-regatta-2026
     date: "2026-11-21"
     date_label: Saturday, November 21
@@ -149,6 +151,8 @@ events:
       Liz is organizing a Friendship Place service opportunity, especially for younger Scouts.
       This may also be a good alternative for families who cannot participate in Sunday's Forest
       Preserve Stewardship Day. Additional details will be shared closer to the date.
+    signup_label: Sign up for the November service weekend
+    signup_url: https://docs.google.com/forms/d/e/1FAIpQLSf8izqqMiG6d6Yrsn1qlCQ-Mmm2HcJMK9DA8carPbTgMM1L6A/viewform
   - id: thanksgiving-break-2026
     date: "2026-11-28"
     date_label: Saturday, November 28
@@ -168,12 +172,11 @@ events:
   - id: december-offsite-den-meetings-2026
     date: "2026-12-12"
     date_label: Saturday, December 12
-    title: Offsite Den Meetings
+    title: Den Meetings
     time: 9:30–11:00 AM
-    location: Offsite location to be announced
+    location: meeting
     description: >-
-      Den meetings will take place offsite. Pack leadership will share the location and final
-      activity details closer to the date.
+      Regular den meetings at Eden United Church of Christ.
   - id: holiday-service-project-2026
     date: "2026-12-19"
     date_label: Saturday, December 19
