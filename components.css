@@ -567,3 +567,12 @@
     padding: 14px 14px 1px;
   }
 }
+
+.council-events-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.council-event-card h2 {
+  margin-top: 0;
+}

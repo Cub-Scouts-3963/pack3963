@@ -15,7 +15,8 @@ if (announcementBanner && announcementData) {
     .sort((first, second) => first.date.localeCompare(second.date));
 
   const nextEvent = upcomingItems.find((event) => event.kind !== 'deadline');
-  const nextDeadline = upcomingItems.find((event) => event.kind === 'deadline');
+  const nextDeadline = upcomingItems.find((event) => event.kind === 'deadline'
+    && event.id === 'popcorn-order-forms-due-2026');
   const eventMessage = document.getElementById('announcement-event-message');
   const deadlineMessage = document.getElementById('announcement-deadline-message');
 
