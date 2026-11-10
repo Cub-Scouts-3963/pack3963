@@ -1,4 +1,4 @@
-const councilFeedUrl = 'https://scoutcal.com/22954.json';
+const councilFeedUrl = '/api/council-events';
 const councilCalendarUrl = 'https://scoutingevent.com/456';
 const councilStatus = document.getElementById('council-events-status');
 const councilList = document.getElementById('council-events-list');
