@@ -573,6 +573,53 @@
   gap: 1rem;
 }
 
+.council-event-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr);
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.council-event-controls label {
+  display: grid;
+  gap: 0.4rem;
+  font-weight: 700;
+}
+
+.council-event-controls input,
+.council-event-controls select {
+  min-height: 2.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid #b9c6d4;
+  border-radius: 0.35rem;
+  font: inherit;
+}
+
+.council-event-month {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.council-event-month__items {
+  display: grid;
+  gap: 1rem;
+}
+
 .council-event-card h2 {
   margin-top: 0;
+}
+
+.council-event-card h3 {
+  margin-top: 0;
+}
+
+.council-event-tags {
+  color: #5a6778;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 700px) {
+  .council-event-controls {
+    grid-template-columns: 1fr;
+  }
 }
